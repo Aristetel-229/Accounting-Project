@@ -44,7 +44,7 @@ public class Main {
                     "TALA could not connect to MySQL.\n\n"
                     + "Please check:\n"
                     + "  1. MySQL is running (in XAMPP, press Start on MySQL).\n"
-                    + "  2. The username and password in tala/database/DBConnection.java\n"
+                    + "  2. The username and password in db.properties (next to run.bat)\n"
                     + "     (now: user \"" + DBConnection.USERNAME + "\" on " + DBConnection.HOST + ":" + DBConnection.PORT + ").\n"
                     + "  3. mysql-connector-j-<version>.jar is in the lib folder.\n\n"
                     + "Details: " + e.  getMessage(),

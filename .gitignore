@@ -1,0 +1,16 @@
+# your MySQL password lives here: never upload it
+db.properties
+
+# build output (made by run.bat, Maven or an IDE)
+out/
+target/
+sources.txt
+*.class
+
+# IDE / OS files
+.idea/
+*.iml
+.vscode/
+nbproject/private/
+.DS_Store
+Thumbs.db

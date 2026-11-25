@@ -1,0 +1,9 @@
+# TALA - MySQL connection settings
+# Copy this file to db.properties (same folder as run.bat) and put in your own values.
+# db.properties is listed in .gitignore, so your password is never uploaded.
+db.host=localhost
+db.port=3306
+db.name=tala_accounting
+db.user=root
+# XAMPP's root password is empty
+db.password=

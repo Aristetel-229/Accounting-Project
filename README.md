@@ -87,24 +87,28 @@ Screens (top navigation). Pictures with the practice data are in `docs/screensho
 3. **MySQL Connector/J** jar (the JDBC driver). It is already included:
    `lib/mysql-connector-j-8.4.0.jar`. **Maven is not needed.**
 
-## 2. Connection settings (no db.properties)
+## 2. Connection settings (db.properties)
 
-The settings are written **in Java**, in one class:
+Your MySQL settings live in a small file next to `run.bat`, **`db.properties`**.
+It is listed in `.gitignore`, so your password is **never uploaded to GitHub**.
+After downloading the project, copy the example and fill in your own values:
 
-`src/main/java/tala/database/DBConnection.java`
-
-```java
-public static final String HOST          = "localhost";
-public static final int    PORT          = 3306;
-public static final String DATABASE_NAME = "tala_accounting";
-public static final String USERNAME      = "root";
-public static final String PASSWORD      = "";   // XAMPP default
+```
+copy db.properties.example db.properties
 ```
 
-Change them if your MySQL uses another password or port.
-You can also set them when starting Java without editing the file, e.g.
-`java -Dtala.db.password=secret -Dtala.db.port=3307 -cp "out;src/main/resources;lib/*" tala.Main`
-(or set the `JAVA_TOOL_OPTIONS` environment variable to `-Dtala.db.password=secret` before `run.bat`).
+```properties
+db.host=localhost
+db.port=3306
+db.name=tala_accounting
+db.user=root
+db.password=          # XAMPP's root password is empty
+```
+
+Without the file, those defaults are used. You can also set any value when starting Java,
+which wins over the file, e.g.
+`java -Dtala.db.password=secret -Dtala.db.port=3307 -cp "out;src/main/resources;lib/*" tala.Main`.
+The code that reads them is `src/main/java/tala/database/DBConnection.java`.
 
 ## 3. Run it
 
@@ -146,7 +150,7 @@ Read the packages in this order:
 src/main/java/tala/
 |-- Main.java                 START HERE: prepares the database, opens the window
 |-- database/
-|   |-- DBConnection.java     MySQL settings + getConnection()
+|   |-- DBConnection.java     reads db.properties + getConnection()
 |   `-- DatabaseSetup.java    creates the database/tables, adds the starting accounts
 |-- model/                    plain data classes (no SQL, no screens)
 |   |-- Account, AccountType  one account of the chart (1010 Cash, Asset, Debit)
@@ -239,7 +243,7 @@ the app draws a yellow "T" instead.
 | "Your account is waiting for an admin" | An admin must open Admin > Users, select you and press **Approve**. |
 | Admin tab is missing | You logged in as a user. Log out and log in with an admin account. |
 | Forgot the only admin password | In MySQL run `DELETE FROM users;` then restart TALA: the two starting log-ins are made again. |
-| "Access denied for user 'root'" | Set the right `PASSWORD` in `DBConnection.java`. |
+| "Access denied for user 'root'" | Put the right `db.password` in `db.properties` (next to run.bat). |
 | "Communications link failure" | MySQL is not running (XAMPP: press Start on MySQL) or the `PORT` is wrong. |
 | Amounts show "PHP" instead of ₱ | The Poppins font has no peso sign, so the app writes "PHP" automatically. |
 | `run.bat` says "invalid flag" | You have an old `run.bat`. The new one works even when the folder name has spaces (OneDrive, "Documents\My Files" ...). |

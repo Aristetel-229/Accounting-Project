@@ -7,27 +7,56 @@ import java.sql.SQLException;
 /**
  * DBConnection
  * ------------------------------------------------------------
- * The ONE place where the MySQL connection settings are kept.
- * There is no db.properties file: the settings are written here
- * in Java, so you only ever edit this class.
+ * The ONE place where the MySQL connection is made.
  *
- * If your MySQL uses a different username, password or port,
- * change the constants below and run the program again.
+ * The settings are read from a small file, db.properties, in the project
+ * folder (next to run.bat). That file stays on your computer only: it is
+ * listed in .gitignore, so your MySQL password is never uploaded to GitHub.
+ * Copy db.properties.example to db.properties and fill in your own values:
+ *
+ *   db.host=localhost
+ *   db.port=3306
+ *   db.name=tala_accounting
+ *   db.user=root
+ *   db.password=          (XAMPP's root password is empty)
+ *
+ * Without the file, those defaults are used. You can also set any of them
+ * when starting Java, which wins over the file:
+ *   java -Dtala.db.port=3307 -Dtala.db.password=secret ... tala.Main
  */
 public class DBConnection {
 
-    // ===================== CHANGE THESE IF NEEDED =====================
-    public static final String HOST = System.getProperty("tala.db.host", "localhost");
-    public static final int PORT = Integer.getInteger("tala.db.port", 3306);
-    public static final String DATABASE_NAME = System.getProperty("tala.db.name", "tala_accounting");
-    public static final String USERNAME = System.getProperty("tala.db.user", "root");
-    public static final String PASSWORD = System.getProperty("tala.db.password", ""); // XAMPP's default
-                                                                                                    // root password is
-                                                                                                    // empty
-    // ==================================================================
-    // (Optional) You can also set them when starting Java, without editing this
-    // file:
-    // java -Dtala.db.port=3307 -Dtala.db.password=secret ... tala.Main
+    private static final java.util.Properties FILE = loadSettingsFile();
+
+    public static final String HOST = setting("host", "localhost");
+    public static final int PORT = Integer.parseInt(setting("port", "3306").trim());
+    public static final String DATABASE_NAME = setting("name", "tala_accounting");
+    public static final String USERNAME = setting("user", "root");
+    private static final String PASSWORD = setting("password", "");
+
+    /** -Dtala.db.<key> first, then db.<key> in db.properties, then the default */
+    private static String setting(String key, String fallback) {
+        String fromJava = System.getProperty("tala.db." + key);
+        if (fromJava != null) {
+            return fromJava;
+        }
+        return FILE.getProperty("db." + key, fallback);
+    }
+
+    /** Reads db.properties from the folder the program was started in (empty if it is missing) */
+    private static java.util.Properties loadSettingsFile() {
+        java.util.Properties p = new java.util.Properties();
+        java.io.File file = new java.io.File(System.getProperty("tala.db.config", "db.properties"));
+        if (file.isFile()) {
+            try (java.io.Reader in = new java.io.InputStreamReader(
+                    new java.io.FileInputStream(file), java.nio.charset.StandardCharsets.UTF_8)) {
+                p.load(in);
+            } catch (java.io.IOException e) {
+                System.err.println("Could not read " + file.getAbsolutePath() + ": " + e.getMessage());
+            }
+        }
+        return p;
+    }
 
     // The class name of the MySQL JDBC driver (inside mysql-connector-j.jar)
     private static final String DRIVER_CLASS = "com.mysql.cj.jdbc.Driver";
