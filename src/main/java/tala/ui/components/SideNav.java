@@ -41,12 +41,12 @@ import java.util.Map;
  *   [logo] TALA                     [<]   <- hides the sidebar
  *          Accounting System
  *   ----------------------------------
- *   OVERVIEW
  *   01  [#] Dashboard                     <- active page: a yellow index tab
- *   RECORD                                   that reaches the edge of the book
- *   02  [/] Journal Entry
+ *   02  [/] Journal Entry                    that reaches the edge of the book
  *   03  [B] General Journal
- *   BOOKS ...  REPORTS ...  MANAGE ...
+ *   ...
+ *   MANAGE                                <- the only section label (admin pages)
+ *   07  [S] Admin
  *
  *   +------------------------------+
  *   | (UA) UCMN                    |      <- who is logged in (green dot = MySQL ok)
@@ -64,13 +64,9 @@ public class SideNav extends JPanel {
 
     public static final int WIDTH = 250;
 
-    /** Section label shown above the first link of each group (by page name) */
+    /** Section label shown above a link (by page name): only "Manage" above Admin */
     private static final Map<String, String> SECTIONS = new LinkedHashMap<>();
     static {
-        SECTIONS.put("Dashboard", "Overview");
-        SECTIONS.put("Journal Entry", "Record");
-        SECTIONS.put("Chart of Accounts", "Books");
-        SECTIONS.put("12 Columnar", "Reports");
         SECTIONS.put("Admin", "Manage");
     }
 
@@ -136,6 +132,8 @@ public class SideNav extends JPanel {
             label.setBorder(BorderFactory.createEmptyBorder(items.isEmpty() ? 14 : 18, 46, 5, 0));
             label.setAlignmentX(Component.LEFT_ALIGNMENT);
             list.add(label);
+        } else if (items.isEmpty()) {
+            list.add(Box.createVerticalStrut(14));   // a little room under the logo line
         }
         NavItem item = new NavItem(pageName, iconName, items.size() + 1);
         item.addActionListener(onClick);
