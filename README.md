@@ -22,7 +22,7 @@ A database made by an older TALA is updated on start-up: a starting account whos
 is still the old `12345` gets `12345678` (passwords someone changed are left alone).
 
 The log-in screen also has **Remember me** (remembers the username on this computer),
-**Forgot password?** (tells the user to ask an admin) and **Sign up** (anyone can make a
+**Forgot password?** (tells the user to ask an admin) and **Sign up** (its own page in the same window: name, username, email and password; anyone can make a
 User account; an admin approves it unless "Sign-ups need approval" is off).
 The top bar shows who is logged in (green dot = MySQL connected) and a **Log out** button.
 
@@ -44,7 +44,7 @@ The whole app follows the light TALA design canvas: a lavender-to-cream page wit
 yellow and violet glows, a deep purple "ledger book" sidebar (numbered links, section labels,
 the active page as a yellow index tab), white cards with lilac outlines and a lilac-to-cream
 header strip, lilac table headers, purple text accents and yellow main buttons. The log-in
-screen shows the campus picture under a lavender sky. The font is **Poppins**.
+screen shows the campus picture under a lavender sky. The font is **Arial** on every page.
 
 Hover effects (all animated, see `ui/theme/Hover.java`): cards and tiles rise and their
 outline turns violet, buttons lift and brighten, table rows turn lilac, sidebar links slide
@@ -62,10 +62,9 @@ slide, and the sidebar can be hidden with the [<] button (a "Menu" button brings
 | Segmented tabs / filters | `ui/components/Segmented.java` |
 | Page title + buttons | `ui/components/PageHeader.java` |
 | Log-in campus picture | `src/main/resources/images/campus.png` |
-| Poppins font files (+ its free OFL license) | `src/main/resources/fonts/` |
 
-Nothing has to be installed for the font: Java loads it from that folder.
-**Poppins has no peso sign (₱)**, so amounts show as `PHP 1,500.00`.
+Nothing has to be installed for the font: Arial comes with Windows (another sans-serif font is used if it is missing).
+Amounts show the peso sign (₱1,500.00). If a computer's font has no ₱, the app writes `PHP 1,500.00` instead.
 
 Screens (top navigation). Pictures with the practice data are in `docs/screenshots/`.
 
@@ -175,8 +174,7 @@ src/main/java/tala/
 |   |-- DateUtil.java         YYYY-MM-DD in, "Nov 3, 2026" out
 |   `-- PasswordUtil.java     salted SHA-256 password hashes
 `-- ui/
-    |-- LoginFrame.java       the log-in screen (first window)
-    |-- SignUpDialog.java     "Sign up" for new users
+    |-- LoginFrame.java       the log-in screen and the Sign up page (first window)
     |-- MainFrame.java        the window: top bar + pages (CardLayout); Admin tab for admins only
     |-- theme/                colors, fonts and the light look (change the look here)
     |-- components/           reusable pieces: cards, buttons, tables, badges, icons
@@ -245,5 +243,5 @@ the app draws a yellow "T" instead.
 | Forgot the only admin password | In MySQL run `DELETE FROM users;` then restart TALA: the two starting log-ins are made again. |
 | "Access denied for user 'root'" | Put the right `db.password` in `db.properties` (next to run.bat). |
 | "Communications link failure" | MySQL is not running (XAMPP: press Start on MySQL) or the `PORT` is wrong. |
-| Amounts show "PHP" instead of ₱ | The Poppins font has no peso sign, so the app writes "PHP" automatically. |
+| Amounts show "PHP" instead of ₱ | That computer's Arial font has no peso sign, so the app writes "PHP" automatically. |
 | `run.bat` says "invalid flag" | You have an old `run.bat`. The new one works even when the folder name has spaces (OneDrive, "Documents\My Files" ...). |

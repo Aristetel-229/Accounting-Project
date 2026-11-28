@@ -22,13 +22,14 @@ import java.awt.Dimension;
 public class FormField extends JPanel {
 
     private final WrapLabel hintLabel = new WrapLabel("");
+    private final JLabel label;
 
     public FormField(String labelText, JComponent input, String hint) {
         setOpaque(false);
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 
         // small sentence-case label (12.5px, semibold, ink #4a4266), like the light design
-        JLabel label = new JLabel(labelText);
+        label = new JLabel(labelText);
         label.setFont(Theme.semibold(12.5f));
         label.setForeground(Theme.LABEL);
         label.setLabelFor(input);              // screen readers link the label to the input
@@ -49,6 +50,11 @@ public class FormField extends JPanel {
         add(input);
         add(Box.createVerticalStrut(1));
         add(hintLabel);
+    }
+
+    /** The label color (light on a purple card header) */
+    public void setLabelColor(java.awt.Color color) {
+        label.setForeground(color);
     }
 
     public void setHint(String hint) {

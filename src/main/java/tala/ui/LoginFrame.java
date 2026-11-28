@@ -99,11 +99,27 @@ public class LoginFrame extends JFrame {
     private final HintField passwordField = new HintField(true, "Enter your password");
     private final JCheckBox rememberBox = new JCheckBox("Remember me");
     private final JLabel errorLabel = new JLabel(" ");
+    private GoldButton loginButton;
+
+    // the Sign up page
+    private final HintField suName = new HintField(false, "e.g. Juan Dela Cruz");
+    private final HintField suUser = new HintField(false, "At least 3 letters or numbers");
+    private final HintField suEmail = new HintField(false, "name@example.com");
+    private final HintField suPass = new HintField(true, AuthService.MIN_PASSWORD + "+ characters");
+    private final HintField suConfirm = new HintField(true, "Type it again");
+    private final JCheckBox agreeBox = new JCheckBox("I agree to the terms of use");
+    private final JLabel suError = new JLabel(" ");
+    private GoldButton createButton;
+    private final boolean needsApproval = readApprovalSetting();
+
+    // the two pages share the window: "login" and "signup"
+    private final java.awt.CardLayout views = new java.awt.CardLayout();
+    private final JPanel viewHolder = new JPanel(views);
 
     public LoginFrame() {
         super("TALA - Log in");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setMinimumSize(new Dimension(1040, 720));
+        setMinimumSize(new Dimension(1040, 760));
         setSize(1280, 820);
         setLocationRelativeTo(null);
         setIconImages(AppImages.getWindowIcons());
@@ -111,10 +127,17 @@ public class LoginFrame extends JFrame {
         Sky sky = new Sky();
         sky.add(createTopBar(), BorderLayout.NORTH);
 
-        JPanel middle = new JPanel(new GridBagLayout());   // centers the card
-        middle.setOpaque(false);
-        middle.add(new LoginCard());
-        sky.add(middle, BorderLayout.CENTER);
+        JPanel loginPage = new JPanel(new GridBagLayout());   // centers the card
+        loginPage.setOpaque(false);
+        loginPage.add(new SplitCard(960, 560, 0.42, 0.48, createForm(), createWelcome(), 420));
+        JPanel signUpPage = new JPanel(new GridBagLayout());
+        signUpPage.setOpaque(false);
+        signUpPage.add(new SplitCard(960, 600, 0.42, 0.48, createSignUpForm(), createJoin(), 420));
+        viewHolder.setOpaque(false);
+        viewHolder.add(loginPage, "login");
+        viewHolder.add(signUpPage, "signup");
+        sky.add(viewHolder, BorderLayout.CENTER);
+        getRootPane().setDefaultButton(loginButton);   // Enter key = Log in
 
         JLabel foot = new JLabel("TALA · Accounting System", SwingConstants.CENTER);
         foot.setFont(Theme.medium(12));
@@ -174,14 +197,70 @@ public class LoginFrame extends JFrame {
                 "Forgot password", JOptionPane.INFORMATION_MESSAGE);
     }
 
-    private void openSignUp() {
-        SignUpDialog dialog = new SignUpDialog(this, auth);
-        dialog.setVisible(true);
-        if (dialog.getCreatedUsername() != null) {
-            usernameField.setText(dialog.getCreatedUsername());
+    /** Opens the Sign up page (same window: the log-in card is swapped for the sign-up card) */
+    private void showSignUp() {
+        errorLabel.setText(" ");
+        suError.setText(" ");
+        views.show(viewHolder, "signup");
+        setTitle("TALA - Sign up");
+        getRootPane().setDefaultButton(createButton);   // Enter key = Create account
+        suName.input.requestFocusInWindow();
+    }
+
+    /** Back to the Log in page; username = the new account to fill in (or null) */
+    private void showLogIn(String username) {
+        views.show(viewHolder, "login");
+        setTitle("TALA - Log in");
+        getRootPane().setDefaultButton(loginButton);
+        if (username != null) {
+            usernameField.setText(username);
             ((JPasswordField) passwordField.input).setText("");
             errorLabel.setText(" ");
             passwordField.input.requestFocusInWindow();
+        } else {
+            usernameField.input.requestFocusInWindow();
+        }
+    }
+
+    private void doSignUp() {
+        if (!agreeBox.isSelected()) {
+            suError.setText("Please agree to the terms of use first.");
+            return;
+        }
+        String username = suUser.getText().trim().toLowerCase();
+        try {
+            String done = auth.signUp(suName.getText(), username, suEmail.getText(),
+                    new String(((JPasswordField) suPass.input).getPassword()),
+                    new String(((JPasswordField) suConfirm.input).getPassword()));
+            JOptionPane.showMessageDialog(this, done, "Account created", JOptionPane.INFORMATION_MESSAGE);
+            for (HintField f : new HintField[] {suName, suUser, suEmail, suPass, suConfirm}) {
+                f.setText("");
+            }
+            agreeBox.setSelected(false);
+            suError.setText(" ");
+            showLogIn(username);
+        } catch (IllegalArgumentException e) {
+            suError.setText(e.getMessage());
+        } catch (SQLException e) {
+            suError.setText("Could not save the account: " + e.getMessage());
+        }
+    }
+
+    private void showTerms() {
+        JOptionPane.showMessageDialog(this,
+                "TALA is a classroom accounting system.\n\n"
+                + "- Use your real name so your instructor or admin knows who you are.\n"
+                + "- Keep your password to yourself.\n"
+                + "- Enter practice data only. An admin may review, approve or remove accounts.",
+                "Terms of use", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /** The Admin switch "Sign-ups need approval"; if MySQL cannot be read, assume yes */
+    private boolean readApprovalSetting() {
+        try {
+            return settingsDAO.getFlag(SettingsDAO.SIGNUPS_NEED_APPROVAL);
+        } catch (SQLException e) {
+            return true;
         }
     }
 
@@ -243,18 +322,29 @@ public class LoginFrame extends JFrame {
     //  The card
     // =================================================================
 
-    private class LoginCard extends JPanel {
+    /**
+     * The white card with the slanted purple panel on the right, used by both
+     * pages: the form on the left, the purple side's content on the right.
+     * top / bottom = where the slant starts and ends (part of the width).
+     */
+    private static class SplitCard extends JPanel {
         static final int PAD = 26;           // space around the card for the shadow
-        static final int W = 900, H = 500;   // the card itself
+        private final int W, H, sideW;
+        private final double top, bottom;
+        private final JPanel form, welcome;
 
-        private final JPanel form = createForm();
-        private final JPanel welcome = createWelcome();
-
-        LoginCard() {
+        SplitCard(int w, int h, double top, double bottom, JPanel form, JPanel side, int sideW) {
             super(null);
+            this.W = w;
+            this.H = h;
+            this.top = top;
+            this.bottom = bottom;
+            this.form = form;
+            this.welcome = side;
+            this.sideW = sideW;
             setOpaque(false);
             add(form);
-            add(welcome);
+            add(side);
         }
 
         @Override
@@ -267,8 +357,8 @@ public class LoginFrame extends JFrame {
             int formW = (int) (W * 0.42);
             form.setBounds(PAD, PAD, formW, H);
             Dimension wp = welcome.getPreferredSize();
-            int ww = 330;
-            welcome.setBounds(PAD + W - 22 - ww, PAD + (H - wp.height) / 2, ww, wp.height);
+            int ww = sideW;
+            welcome.setBounds(PAD + W - 44 - ww, PAD + (H - wp.height) / 2, ww, wp.height);
         }
 
         @Override
@@ -292,12 +382,12 @@ public class LoginFrame extends JFrame {
             side.clip(card);
             // yellow edge: linear-gradient(180deg, #fddd44, #f7af1a)
             side.setPaint(new GradientPaint(0, y, GOLD_1, 0, y + H, GOLD_2));
-            side.fillPolygon(slant(x, y, 0.468, 0.748));
-            Polygon panel = slant(x, y, 0.47, 0.75);
+            side.fillPolygon(slant(x, y, top - 0.002, bottom - 0.002));
+            Polygon panel = slant(x, y, top, bottom);
             side.clip(panel);
             // linear-gradient(140deg, #2e1065 0%, #4c1d95 50%, #6d28d9 100%)
             side.setPaint(new LinearGradientPaint(
-                    new Point2D.Double(x + W * 0.47, y), new Point2D.Double(x + W, y + H),
+                    new Point2D.Double(x + W * top, y), new Point2D.Double(x + W, y + H),
                     new float[] {0f, 0.5f, 1f},
                     new Color[] {new Color(0x2e1065), new Color(0x4c1d95), new Color(0x6d28d9)}));
             side.fillRect(x, y, W, H);
@@ -391,13 +481,13 @@ public class LoginFrame extends JFrame {
 
         GoldButton go = new GoldButton("Log in");
         go.addActionListener(e -> doLogin());
-        getRootPane().setDefaultButton(go);   // Enter key = Log in
+        loginButton = go;
 
         JLabel noAccount = new JLabel("Don't have an account?");
         noAccount.setFont(Theme.regular(13.5f));
         noAccount.setForeground(SOFT);
         LinkButton signUp = new LinkButton("Sign up", true);
-        signUp.addActionListener(e -> openSignUp());
+        signUp.addActionListener(e -> showSignUp());
         JPanel alt = new JPanel(new FlowLayout(FlowLayout.CENTER, 2, 0));
         alt.setOpaque(false);
         alt.add(noAccount);
@@ -422,56 +512,216 @@ public class LoginFrame extends JFrame {
         return form;
     }
 
-    /** Right part of the card: WELCOME BACK!, a journal entry preview, stats and chips */
+    /**
+     * Right part of the Log in card (left-aligned): the yellow eyebrow,
+     * WELCOME BACK!, one line about TALA, a journal entry card and the stats.
+     */
     private JPanel createWelcome() {
         JPanel panel = new JPanel();
         panel.setOpaque(false);
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
 
-        JLabel eyebrow = new JLabel("TALA · ACCOUNTING SYSTEM");
-        eyebrow.setFont(Theme.spaced(Theme.semibold(10.5f), 0.18f));
-        eyebrow.setForeground(GOLD_1);
-
+        JComponent eyebrow = new SpacedText("TALA · ACCOUNTING SYSTEM", Theme.bold(13), GOLD_1, 3);
         JLabel big = new JLabel("WELCOME BACK!");
-        big.setFont(Theme.bold(32));
+        big.setFont(Theme.bold(42));
         big.setForeground(Color.WHITE);
+        JComponent text = paragraph("Log in to record journal entries, post to the ledger and keep your "
+                + "12-column worksheet balanced.");
 
-        // three short lines, each lined up on the right edge
-        // three short lines, lined up on the right edge
-        JLabel text = new JLabel("<html><div style='text-align:right'>Log in to record journal entries,<br>"
-                + "post to the ledger and keep your<br>12-column worksheet balanced.</div></html>");
-        text.setFont(Theme.regular(13.5f));
-        text.setForeground(new Color(0xddd0fb));
-        text.setHorizontalAlignment(SwingConstants.RIGHT);
-        text.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 2));
+        JComponent[] parts = {eyebrow, big, text, new EntryCard(), new StatsRow()};
+        int[] gaps = {6, 6, 22, 22, 0};
+        for (int i = 0; i < parts.length; i++) {
+            parts[i].setAlignmentX(Component.LEFT_ALIGNMENT);
+            panel.add(parts[i]);
+            if (gaps[i] > 0) {
+                panel.add(Box.createVerticalStrut(gaps[i]));
+            }
+        }
+        return panel;
+    }
 
-        JPanel stats = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        stats.setOpaque(false);
-        stats.add(new StatBox("7", "MODULES"));
-        stats.add(new StatBox("12", "COLUMNS"));
-        stats.add(new StatBox("2", "ROLES"));
+    /** A left-aligned paragraph in soft lilac that wraps at the panel's width */
+    private static JComponent paragraph(String text) {
+        return new Paragraph(text, Theme.regular(16), new Color(0xe4dafc), 420);
+    }
 
-        JPanel chips = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
-        chips.setOpaque(false);
-        for (String word : new String[] {"Journal", "Ledger", "Worksheet"}) {
-            chips.add(new Chip(word));
+    /** Text that wraps word by word inside its width (measured with the real font, so nothing is cut) */
+    private static class Paragraph extends JComponent {
+        private final String text;
+        private final int width;
+
+        Paragraph(String text, java.awt.Font font, Color color, int width) {
+            this.text = text;
+            this.width = width;
+            setFont(font);
+            setForeground(color);
         }
 
-        JComponent[] parts = {eyebrow, big, text, new MockEntry(), stats, chips};
-        for (JComponent c : parts) {
-            c.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        private java.util.List<String> lines(FontMetrics fm, int max) {
+            java.util.List<String> lines = new java.util.ArrayList<>();
+            StringBuilder line = new StringBuilder();
+            for (String word : text.split(" ")) {
+                String next = line.length() == 0 ? word : line + " " + word;
+                if (line.length() > 0 && fm.stringWidth(next) > max) {
+                    lines.add(line.toString());
+                    line = new StringBuilder(word);
+                } else {
+                    line = new StringBuilder(next);
+                }
+            }
+            lines.add(line.toString());
+            return lines;
         }
-        panel.add(eyebrow);
-        panel.add(Box.createVerticalStrut(8));
-        panel.add(big);
-        panel.add(Box.createVerticalStrut(8));
-        panel.add(text);
-        panel.add(Box.createVerticalStrut(14));
-        panel.add(parts[3]);
-        panel.add(Box.createVerticalStrut(12));
-        panel.add(stats);
-        panel.add(Box.createVerticalStrut(12));
-        panel.add(chips);
+
+        @Override
+        public Dimension getPreferredSize() {
+            FontMetrics fm = getFontMetrics(getFont());
+            int lineH = fm.getHeight() + 3;
+            // measured a little narrower than the box, so a wider screen font never runs past the edge
+            return new Dimension(width, lines(fm, width - 24).size() * lineH + 2);
+        }
+
+        @Override public Dimension getMaximumSize() { return getPreferredSize(); }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = smooth(g);
+            g2.setFont(getFont());
+            g2.setColor(getForeground());
+            FontMetrics fm = g2.getFontMetrics();
+            int y = fm.getAscent(), lineH = fm.getHeight() + 3;
+            for (String line : lines(fm, getWidth() - 24)) {
+                g2.drawString(line, 0, y);
+                y += lineH;
+            }
+            g2.dispose();
+        }
+    }
+
+    /** Left part of the Sign up card: the form */
+    private JPanel createSignUpForm() {
+        JPanel form = new JPanel();
+        form.setOpaque(false);
+        form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
+        form.setBorder(BorderFactory.createEmptyBorder(30, 40, 20, 40));
+
+        JLabel title = new JLabel("Sign up", SwingConstants.CENTER) {
+            // the same violet-to-yellow bar under the title as on the Log in page
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = smooth(g);
+                int bx = (getWidth() - 44) / 2, by = getHeight() - 5;
+                g2.setPaint(new GradientPaint(bx, 0, VIOLET, bx + 44, 0, GOLD_1));
+                g2.fillRoundRect(bx, by, 44, 4, 4, 4);
+                g2.dispose();
+            }
+        };
+        title.setFont(Theme.bold(28));
+        title.setForeground(INK);
+        title.setBorder(BorderFactory.createEmptyBorder(0, 0, 12, 0));
+        JLabel lead = new JLabel("Create your TALA account", SwingConstants.CENTER);
+        lead.setFont(Theme.regular(13));
+        lead.setForeground(MUTED);
+
+        for (HintField f : new HintField[] {suName, suUser, suEmail, suPass, suConfirm}) {
+            f.compact();
+            f.input.addKeyListener(new java.awt.event.KeyAdapter() {
+                @Override public void keyTyped(java.awt.event.KeyEvent e) { suError.setText(" "); }
+            });
+        }
+
+        // [ ] I agree to the terms of use   (the words "terms of use" open a short note)
+        agreeBox.setText("I agree to the");
+        agreeBox.setOpaque(false);
+        agreeBox.setFont(Theme.regular(13));
+        agreeBox.setForeground(SOFT);
+        agreeBox.setFocusPainted(false);
+        agreeBox.setIcon(new CheckIcon(false));
+        agreeBox.setSelectedIcon(new CheckIcon(true));
+        agreeBox.setIconTextGap(8);
+        agreeBox.setBorder(BorderFactory.createEmptyBorder(6, 0, 6, 0));
+        agreeBox.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        agreeBox.addActionListener(e -> suError.setText(" "));
+        Hover.of(agreeBox);
+        LinkButton terms = new LinkButton("terms of use", false);
+        terms.setBorder(BorderFactory.createEmptyBorder(6, 3, 6, 3));
+        terms.addActionListener(e -> showTerms());
+        JPanel agreeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        agreeRow.setOpaque(false);
+        agreeRow.add(agreeBox);
+        agreeRow.add(terms);
+
+        suError.setFont(Theme.semibold(12.5f));
+        suError.setForeground(ERROR);
+        suError.setHorizontalAlignment(SwingConstants.CENTER);
+
+        createButton = new GoldButton("Create account");
+        createButton.addActionListener(e -> doSignUp());
+
+        // "New accounts start as User and need admin approval before logging in."
+        JLabel note = new JLabel("<html><div style='text-align:center'>New accounts start as "
+                + "<b style='color:#6d28d9'>User</b>"
+                + (needsApproval ? " and need admin approval<br>before logging in." : " and can log in<br>right away.")
+                + "</div></html>", SwingConstants.CENTER);
+        note.setFont(Theme.regular(12));
+        note.setForeground(MUTED);
+
+        JLabel have = new JLabel("Already have an account?");
+        have.setFont(Theme.regular(13.5f));
+        have.setForeground(SOFT);
+        LinkButton logIn = new LinkButton("Log In", true);
+        logIn.setBorder(BorderFactory.createEmptyBorder(6, 4, 6, 4));
+        logIn.addActionListener(e -> showLogIn(null));
+        JPanel alt = new JPanel(new FlowLayout(FlowLayout.CENTER, 2, 0));
+        alt.setOpaque(false);
+        alt.add(have);
+        alt.add(logIn);
+
+        JComponent[] parts = {title, lead, gap(12),
+            labeled("Full name", suName, Icons.USER), gap(8),
+            labeled("Username", suUser, Icons.AT), gap(8),
+            labeled("Email", suEmail, Icons.MAIL), gap(8),
+            labeled("Password", suPass, Icons.LOCK), gap(8),
+            labeled("Confirm password", suConfirm, Icons.LOCK), gap(6),
+            agreeRow, suError, createButton, gap(4), note, alt};
+        for (JComponent part : parts) {
+            part.setAlignmentX(Component.CENTER_ALIGNMENT);
+            if (!(part instanceof Box.Filler)) {
+                part.setMaximumSize(new Dimension(Integer.MAX_VALUE, part.getPreferredSize().height));
+            }
+            form.add(part);
+        }
+        return form;
+    }
+
+    /** Right part of the Sign up card (left-aligned): JOIN TALA! and the three steps on a line */
+    private JPanel createJoin() {
+        JPanel panel = new JPanel();
+        panel.setOpaque(false);
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+
+        JComponent eyebrow = new SpacedText("TALA · ACCOUNTING SYSTEM", Theme.bold(13), GOLD_1, 3);
+        JLabel big = new JLabel("JOIN TALA!");
+        big.setFont(Theme.bold(42));
+        big.setForeground(Color.WHITE);
+        JComponent text = paragraph("Create your account to start recording journal entries, posting to the "
+                + "ledger and building your 12-column worksheet.");
+        Steps steps = new Steps(new String[][] {
+            {"Create your account", "Fill in your name, username and password"},
+            needsApproval ? new String[] {"Wait for approval", "An admin reviews and approves new users"}
+                          : new String[] {"No waiting", "New accounts can log in right away"},
+            {"Start recording", "Log in and post your first entry"}});
+
+        JComponent[] parts = {eyebrow, big, text, steps};
+        int[] gaps = {6, 6, 30, 0};
+        for (int i = 0; i < parts.length; i++) {
+            parts[i].setAlignmentX(Component.LEFT_ALIGNMENT);
+            panel.add(parts[i]);
+            if (gaps[i] > 0) {
+                panel.add(Box.createVerticalStrut(gaps[i]));
+            }
+        }
         return panel;
     }
 
@@ -591,12 +841,20 @@ public class LoginFrame extends JFrame {
 
         void setIconName(String name) { this.iconName = name; repaint(); }
 
+        private int height = 46;
+
+        /** A slightly shorter line with smaller text (the Sign up form has five of them) */
+        void compact() {
+            height = 38;
+            input.setFont(Theme.regular(14));
+        }
+
         String getText() { return input.getText(); }
         void setText(String text) { input.setText(text); }
 
         @Override
         public Dimension getPreferredSize() {
-            return new Dimension(200, 46);
+            return new Dimension(200, height);
         }
 
         @Override
@@ -752,145 +1010,248 @@ public class LoginFrame extends JFrame {
         }
     }
 
-    /** The small white "Journal entry JE-7322" card, tilted -2deg; it straightens on hover */
-    private static class MockEntry extends JComponent {
-        MockEntry() {
+    /** Draws text with even extra space between the letters (small UPPERCASE labels) */
+    private static int drawSpaced(Graphics2D g2, String text, int x, int y, int spacing) {
+        FontMetrics fm = g2.getFontMetrics();
+        for (int i = 0; i < text.length(); i++) {
+            String ch = text.substring(i, i + 1);
+            g2.drawString(ch, x, y);
+            x += fm.stringWidth(ch) + (i < text.length() - 1 ? spacing : 0);
+        }
+        return x;
+    }
+
+    private static int spacedWidth(FontMetrics fm, String text, int spacing) {
+        int w = 0;
+        for (int i = 0; i < text.length(); i++) {
+            w += fm.stringWidth(text.substring(i, i + 1)) + (i < text.length() - 1 ? spacing : 0);
+        }
+        return w;
+    }
+
+    /** A one-line label with letter spacing ("T A L A  ·  A C C O U N T I N G") */
+    private static class SpacedText extends JComponent {
+        private final String text;
+        private final int spacing;
+
+        SpacedText(String text, java.awt.Font font, Color color, int spacing) {
+            this.text = text;
+            this.spacing = spacing;
+            setFont(font);
+            setForeground(color);
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            FontMetrics fm = getFontMetrics(getFont());
+            return new Dimension(spacedWidth(fm, text, spacing) + 2, fm.getHeight());
+        }
+
+        @Override public Dimension getMaximumSize() { return getPreferredSize(); }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = smooth(g);
+            g2.setFont(getFont());
+            g2.setColor(getForeground());
+            drawSpaced(g2, text, 0, g2.getFontMetrics().getAscent(), spacing);
+            g2.dispose();
+        }
+    }
+
+    /**
+     * The white "JOURNAL ENTRY" card: a debit line, an indented credit line,
+     * a Total row with double underlines and "Balanced, ready to post".
+     * Two faded cards peek out under it, like a small stack. It rises a
+     * little on hover.
+     */
+    private static class EntryCard extends JComponent {
+        private static final int CARD_H = 236, STACK = 16;
+
+        EntryCard() {
             Hover.of(this);
         }
 
-        @Override public Dimension getPreferredSize() { return new Dimension(330, 128); }
+        @Override public Dimension getPreferredSize() { return new Dimension(420, CARD_H + STACK + 4); }
         @Override public Dimension getMaximumSize()   { return getPreferredSize(); }
 
         @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = smooth(g);
             float t = Hover.of(this).value();
-            int x = 26, y = 8, w = getWidth() - x - 4, h = 104;
-            g2.rotate(Math.toRadians(-2 * (1 - t)), x + w / 2.0, y + h / 2.0);
-            g2.translate(0, -2 * t);
-            // shadow "0 18px 40px rgba(20,6,50,.35)"
+            int w = getWidth() - 1;
+            int up = Math.round(2 * t);
+            // the stack under the card
+            g2.setColor(new Color(255, 255, 255, 46));
+            g2.fill(new RoundRectangle2D.Float(28, STACK, w - 56, CARD_H, 22, 22));
+            g2.setColor(new Color(255, 255, 255, 80));
+            g2.fill(new RoundRectangle2D.Float(14, STACK / 2f, w - 28, CARD_H, 22, 22));
+            // soft shadow
             for (int i = 6; i >= 1; i--) {
-                g2.setColor(new Color(20, 6, 50, 9 + Math.round(4 * t)));
-                g2.fill(new RoundRectangle2D.Float(x - i, y + 4 + i, w + i * 2, h, 28 + i, 28 + i));
+                g2.setColor(new Color(20, 6, 50, 10));
+                g2.fill(new RoundRectangle2D.Float(-i / 2f, 4 + i - up, w + i, CARD_H, 22 + i, 22 + i));
             }
-            Shape card = new RoundRectangle2D.Float(x, y, w, h, 28, 28);
+            g2.translate(0, -up);
             g2.setColor(Color.WHITE);
-            g2.fill(card);
-            Graphics2D top = (Graphics2D) g2.create();
-            top.clip(card);
-            top.setColor(GOLD_1);
-            top.fillRect(x, y, w, 4);
-            top.dispose();
+            g2.fill(new RoundRectangle2D.Float(0, 0, w, CARD_H, 22, 22));
 
-            int px = x + 14, pr = x + w - 14;
-            // header: JOURNAL ENTRY ......... [JE-7322]
-            g2.setFont(Theme.spaced(Theme.semibold(10.5f), 0.1f));
-            g2.setColor(new Color(0x7c6f99));
-            g2.drawString("JOURNAL ENTRY", px, y + 24);
-            g2.setFont(Theme.mono(10.5f));
+            int left = 22, right = w - 22, drRight = right - 116;
+            // header: JOURNAL ENTRY ............ [JE-7322 · Nov. 3]
+            g2.setFont(Theme.bold(12.5f));
+            g2.setColor(new Color(0x4c1d95));
+            drawSpaced(g2, "JOURNAL ENTRY", left, 36, 2);
+            String ref = "JE-7322 · Nov. 3";
+            g2.setFont(Theme.bold(12));
             FontMetrics fm = g2.getFontMetrics();
-            String ref = "JE-7322";
-            int rw = fm.stringWidth(ref) + 14;
-            g2.setColor(new Color(0xf1ebff));
-            g2.fillRoundRect(pr - rw, y + 12, rw, 17, 10, 10);
-            g2.setColor(VIOLET);
-            g2.drawString(ref, pr - rw + 7, y + 25);
+            int pw = fm.stringWidth(ref) + 20;
+            g2.setColor(new Color(0xefe8ff));
+            g2.fillRoundRect(right - pw, 20, pw, 24, 24, 24);
+            g2.setColor(new Color(0x6d28d9));
+            g2.drawString(ref, right - pw + 10, 37);
 
-            // lines
+            // column names
             g2.setFont(Theme.regular(12));
-            g2.setColor(new Color(0x2a1f45));
-            g2.drawString("Cash", px, y + 48);
-            g2.drawString("Accounts Receivable", px + 16, y + 70);
-            g2.setFont(Theme.semibold(12));
             fm = g2.getFontMetrics();
-            String amt = tala.util.Money.PESO_SIGN + "15,000.00";
-            g2.setColor(new Color(0x5b21b6));
-            g2.drawString(amt, pr - 92 - fm.stringWidth(amt), y + 48);
-            g2.setColor(new Color(0xb7791f));
-            g2.drawString(amt, pr - fm.stringWidth(amt), y + 70);
-            // dashed row lines
+            g2.setColor(new Color(0x8a83a3));
+            drawSpaced(g2, "ACCOUNT", left, 68, 2);
+            drawSpaced(g2, "DR", drRight - spacedWidth(fm, "DR", 2), 68, 2);
+            drawSpaced(g2, "CR", right - spacedWidth(fm, "CR", 2), 68, 2);
             g2.setColor(new Color(0xe6e0f3));
-            g2.setStroke(new BasicStroke(1f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10f, new float[] {3f, 3f}, 0f));
-            g2.drawLine(px, y + 55, pr, y + 55);
-            g2.drawLine(px, y + 77, pr, y + 77);
-            // footer
-            g2.setFont(Theme.semibold(11));
-            g2.setColor(new Color(0x17663d));
-            g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            g2.drawPolyline(new int[] {px, px + 3, px + 9}, new int[] {y + 91, y + 94, y + 87}, 3);
-            g2.drawString("Debits = Credits", px + 14, y + 95);
-            g2.setFont(Theme.regular(11));
-            g2.setColor(new Color(0x8a7fa6));
+            g2.fillRect(left, 78, right - left, 2);
+
+            // Cash (debit) and Accounts Payable (credit, indented)
+            g2.setFont(Theme.regular(15.5f));
+            g2.setColor(new Color(0x231b3a));
+            g2.drawString("Cash", left, 106);
+            g2.drawString(ellipsis(g2, "Accounts Payable", drRight - left - 40 - 70), left + 22, 146);
+            g2.setFont(Theme.bold(15.5f));
             fm = g2.getFontMetrics();
-            g2.drawString("Posted Nov. 3", pr - fm.stringWidth("Posted Nov. 3"), y + 95);
+            String amt = "15,000.00";
+            g2.setColor(new Color(0x5b21b6));
+            g2.drawString(amt, drRight - fm.stringWidth(amt), 106);
+            g2.setColor(new Color(0xa8740c));
+            g2.drawString(amt, right - fm.stringWidth(amt), 146);
+            g2.setColor(new Color(0xf0ecf7));
+            g2.fillRect(left, 120, right - left, 1);
+
+            // Total with a firm line above and double lines under the amounts
+            g2.setColor(new Color(0x2e1065));
+            g2.fillRect(left, 160, right - left, 2);
+            g2.setFont(Theme.bold(15.5f));
+            fm = g2.getFontMetrics();
+            g2.drawString("Total", left, 188);
+            int aw = fm.stringWidth(amt);
+            g2.drawString(amt, drRight - aw, 188);
+            g2.drawString(amt, right - aw, 188);
+            for (int x2 : new int[] {drRight, right}) {
+                int x1 = x2 - Math.max(aw, 104);
+                g2.fillRect(x1, 194, x2 - x1, 1);
+                g2.fillRect(x1, 197, x2 - x1, 1);
+            }
+
+            // Balanced, ready to post
+            g2.setColor(new Color(0xbbf7d0));
+            g2.fillOval(left - 2, 207, 16, 16);
+            g2.setColor(new Color(0x22c55e));
+            g2.fillOval(left + 1, 210, 10, 10);
+            g2.setFont(Theme.bold(14.5f));
+            g2.setColor(new Color(0x17803d));
+            g2.drawString("Balanced, ready to post", left + 22, 220);
             g2.dispose();
         }
-    }
 
-    /** A small see-through box with a big yellow number: 7 MODULES */
-    private static class StatBox extends JComponent {
-        private final String number, word;
-
-        StatBox(String number, String word) {
-            this.number = number;
-            this.word = word;
-            Hover.of(this);
-        }
-
-        @Override public Dimension getPreferredSize() { return new Dimension(74, 56); }
-
-        @Override
-        protected void paintComponent(Graphics g) {
-            Graphics2D g2 = smooth(g);
-            float t = Hover.of(this).value();
-            int w = getWidth() - 1, h = getHeight() - 1;
-            // the see-through glass box of the design, a little stronger: a soft white wash
-            // (brighter at the top), a crisp white edge and a thin highlight line on top
-            float up = 1.5f * t;
-            RoundRectangle2D box = new RoundRectangle2D.Float(0.5f, 0.5f - up, w - 1, h - 3, 20, 20);
-            g2.setPaint(new GradientPaint(0, 0, new Color(255, 255, 255, Math.round(38 + 18 * t)),
-                    0, h, new Color(255, 255, 255, Math.round(16 + 14 * t))));
-            g2.fill(box);
-            g2.setColor(new Color(255, 255, 255, Math.round(70 + 50 * t)));
-            g2.setStroke(new BasicStroke(1.2f));
-            g2.draw(box);
-            g2.setColor(new Color(255, 255, 255, 60));
-            g2.drawLine(10, Math.round(2 - up), w - 10, Math.round(2 - up));
-            g2.setFont(Theme.bold(21));
+        private static String ellipsis(Graphics2D g2, String text, int max) {
             FontMetrics fm = g2.getFontMetrics();
-            g2.setColor(Theme.mix(GOLD_1, new Color(0xfef08a), t));
-            g2.drawString(number, w - 10 - fm.stringWidth(number), 27 - up);
-            g2.setFont(Theme.spaced(Theme.medium(9.5f), 0.08f));
-            fm = g2.getFontMetrics();
-            g2.setColor(new Color(0xe4dafc));
-            g2.drawString(word, w - 10 - fm.stringWidth(word), 44 - up);
-            g2.dispose();
+            if (fm.stringWidth(text) <= max) {
+                return text;
+            }
+            String t = text;
+            while (t.length() > 1 && fm.stringWidth(t + "…") > max) {
+                t = t.substring(0, t.length() - 1);
+            }
+            return t + "…";
         }
     }
 
-    /** A small pill: (Journal) (Ledger) (Worksheet) */
-    private static class Chip extends JLabel {
-        Chip(String text) {
-            super(text);
-            setFont(Theme.medium(12));
-            setForeground(Color.WHITE);
-            setBorder(BorderFactory.createEmptyBorder(4, 11, 4, 11));
-            Hover.of(this);
-        }
+    /** "7 MODULES | 12 COLUMNS | 2 ROLES": a thin line on top, big yellow numbers */
+    private static class StatsRow extends JComponent {
+        private static final String[][] STATS = {{"7", "MODULES"}, {"12", "COLUMNS"}, {"2", "ROLES"}};
+
+        @Override public Dimension getPreferredSize() { return new Dimension(420, 96); }
+        @Override public Dimension getMaximumSize()   { return getPreferredSize(); }
 
         @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = smooth(g);
-            float t = Hover.of(this).value();
-            int w = getWidth() - 1, h = getHeight() - 1;
-            // see-through glass pill with a clear white edge; it brightens under the mouse
-            g2.setColor(new Color(255, 255, 255, Math.round(32 + 30 * t)));
-            g2.fillRoundRect(0, 0, w, h, h, h);
-            g2.setColor(new Color(255, 255, 255, Math.round(80 + 60 * t)));
-            g2.setStroke(new BasicStroke(1.2f));
-            g2.drawRoundRect(0, 0, w, h, h, h);
+            int w = getWidth();
+            g2.setColor(new Color(255, 255, 255, 40));
+            g2.fillRect(0, 4, w, 1);
+            int col = w / 3;
+            for (int i = 0; i < STATS.length; i++) {
+                int x = i * col;
+                if (i > 0) {
+                    g2.setColor(new Color(255, 255, 255, 40));
+                    g2.fillRect(x - 18, 24, 1, 56);
+                }
+                g2.setFont(Theme.bold(32));
+                g2.setColor(GOLD_1);
+                g2.drawString(STATS[i][0], x, 58);
+                g2.setFont(Theme.regular(13));
+                g2.setColor(new Color(0xd6c8fa));
+                drawSpaced(g2, STATS[i][1], x, 82, 2);
+            }
             g2.dispose();
-            super.paintComponent(g);
+        }
+    }
+
+    /**
+     * The sign-up steps on a line: numbered circles joined by a thin rail
+     * (the first one filled yellow, the others outlined), each with a bold
+     * title and a short line.
+     */
+    private static class Steps extends JComponent {
+        private static final int ROW = 72, D = 36;
+        private final String[][] steps;
+
+        Steps(String[][] steps) {
+            this.steps = steps;
+        }
+
+        @Override public Dimension getPreferredSize() { return new Dimension(420, ROW * (steps.length - 1) + D + 6); }
+        @Override public Dimension getMaximumSize()   { return getPreferredSize(); }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = smooth(g);
+            int cx = D / 2 + 1;
+            // the rail behind the circles
+            g2.setColor(new Color(255, 255, 255, 90));
+            g2.fillRect(cx - 1, D / 2, 3, ROW * (steps.length - 1));
+            for (int i = 0; i < steps.length; i++) {
+                int y = i * ROW + 1;
+                String n = String.valueOf(i + 1);
+                if (i == 0) {
+                    g2.setPaint(new GradientPaint(1, y, GOLD_1, 1 + D, y + D, GOLD_2));
+                    g2.fillOval(1, y, D, D);
+                    g2.setColor(Theme.PURPLE_DEEP);
+                } else {
+                    g2.setColor(new Color(0x4c1d95));
+                    g2.fillOval(1, y, D, D);
+                    g2.setColor(GOLD_1);
+                    g2.setStroke(new BasicStroke(2.2f));
+                    g2.drawOval(2, y + 1, D - 2, D - 2);
+                }
+                g2.setFont(Theme.bold(15));
+                FontMetrics fm = g2.getFontMetrics();
+                g2.drawString(n, 1 + (D - fm.stringWidth(n)) / 2, y + (D + fm.getAscent() - fm.getDescent()) / 2);
+                g2.setFont(Theme.bold(17.5f));
+                g2.setColor(Color.WHITE);
+                g2.drawString(steps[i][0], D + 20, y + 15);
+                g2.setFont(Theme.regular(14.5f));
+                g2.setColor(new Color(0xddd0fb));
+                g2.drawString(steps[i][1], D + 20, y + 36);
+            }
+            g2.dispose();
         }
     }
 

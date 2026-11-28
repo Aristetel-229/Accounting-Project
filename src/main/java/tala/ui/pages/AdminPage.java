@@ -123,7 +123,7 @@ public class AdminPage extends BasePage {
 
     // users
     private final ReadOnlyTableModel userModel =
-            new ReadOnlyTableModel("Name", "Username", "Role", "Status", "Last log in");
+            new ReadOnlyTableModel("Name", "Username", "Email", "Role", "Status", "Last log in");
     private final TalaTable userTable;
     private final List<User> allUsers = new ArrayList<>();
     private final List<User> shownUsers = new ArrayList<>();
@@ -138,10 +138,12 @@ public class AdminPage extends BasePage {
     private final AppButton roleButton = new AppButton("Make admin", Icons.get(Icons.SHIELD, 16, Theme.PURPLE_DEEP), AppButton.Style.SECONDARY);
     private final AppButton resetButton = new AppButton("Reset password", Icons.get(Icons.KEY, 16, Theme.PURPLE_DEEP), AppButton.Style.SECONDARY);
     private final AppButton deleteButton = new AppButton("Delete user", Icons.get(Icons.TRASH, 16, Theme.RED), AppButton.Style.DANGER);
+    private final AppButton emailButton = new AppButton("Edit email", Icons.get(Icons.MAIL, 16, Theme.PURPLE_DEEP), AppButton.Style.SECONDARY);
 
     // add user
     private final JTextField nameField = new JTextField();
     private final JTextField usernameField = new JTextField();
+    private final JTextField emailField = new JTextField();
     private final JPasswordField passwordField = new JPasswordField();
     private final JComboBox<String> roleCombo = new JComboBox<>(new String[] {User.USER, User.ADMIN});
     private final WrapLabel addMessage = new WrapLabel("");
@@ -173,9 +175,29 @@ public class AdminPage extends BasePage {
                     default:            return super.pillColors(text);
                 }
             }
+
+            // users added by an admin have no email: the dash is drawn faint
+            @Override
+            protected Color cellForeground(int row, int column) {
+                return column == 2 && "—".equals(getModel().getValueAt(row, column)) ? Theme.NIL : Theme.TEXT;
+            }
+
+            // the full name, username or email when the mouse rests on it (long ones end in "...")
+            @Override
+            public String getToolTipText(java.awt.event.MouseEvent e) {
+                int row = rowAtPoint(e.getPoint()), col = columnAtPoint(e.getPoint());
+                if (row < 0 || col < 0 || convertColumnIndexToModel(col) > 2) {
+                    return null;
+                }
+                Object v = getValueAt(row, col);
+                return v == null || "—".equals(v) ? null : v.toString();
+            }
         };
-        userTable.setPillColumns(2, 3);
-        userTable.setColumnWidths(0, 175, 95, 95, 130);
+        userTable.setToolTipText("");   // turns tooltips on for the cells
+        userTable.setCompact(13.5f, 10);   // a little tighter: six columns share the card
+        userTable.setPillColumns(3, 4);
+        userTable.setColumnWidths(0, 132, 0, 78, 88, 104);
+        userTable.setWrapColumns(0);   // long names go onto a second line
         userTable.getSelectionModel().addListSelectionListener(e -> updateUserButtons());
 
         // ---- header: Add user (yellow) + Back up database
@@ -264,7 +286,7 @@ public class AdminPage extends BasePage {
     private Card createUsersCard() {
         Theme.styleField(searchField);
         searchField.setPreferredSize(new Dimension(220, 46));
-        searchField.setToolTipText("Type part of a name or username");
+        searchField.setToolTipText("Type part of a name, username or email");
         JLabel searchLabel = new JLabel("Search");
         searchLabel.setFont(Theme.bold(15));
         searchLabel.setForeground(Theme.TITLE);
@@ -311,12 +333,13 @@ public class AdminPage extends BasePage {
         roleButton.addActionListener(e -> changeRoleOfSelected());
         resetButton.addActionListener(e -> resetPasswordOfSelected());
         deleteButton.addActionListener(e -> deleteSelected());
+        emailButton.addActionListener(e -> editEmailOfSelected());
         selectedLabel.setFont(Theme.bold(15));
         selectedLabel.setForeground(Theme.TITLE);
 
         JPanel buttons = new JPanel(new GridLayout(0, 3, 8, 8));
         buttons.setOpaque(false);
-        for (AppButton b : new AppButton[] {approveButton, toggleButton, roleButton, resetButton, deleteButton}) {
+        for (AppButton b : new AppButton[] {approveButton, toggleButton, roleButton, resetButton, emailButton, deleteButton}) {
             buttons.add(b);
         }
         JPanel footer = new JPanel(new BorderLayout(0, 10));
@@ -333,6 +356,8 @@ public class AdminPage extends BasePage {
         card.setHeaderIcon(new IconBox(Icons.PLUS, 40, Theme.YELLOW, Theme.PURPLE_DEEP));
         Theme.styleField(nameField);
         Theme.styleField(usernameField);
+        Theme.styleField(emailField);
+        Theme.setPlaceholder(emailField, "name@example.com");
         Theme.styleField(passwordField);
         Theme.styleCombo(roleCombo);
         addMessage.setFont(Theme.bold(14.5f));
@@ -348,6 +373,7 @@ public class AdminPage extends BasePage {
         JComponent[] parts = {
             new FormField("Full name", nameField, "e.g. Juan Dela Cruz"),
             new FormField("Username", usernameField, "e.g. ucmn-jdelacruz"),
+            new FormField("Email", emailField, "Optional, e.g. name@example.com"),
             new FormField("Password", passwordField, "At least " + AuthService.MIN_PASSWORD + " characters"),
             new FormField("Role", roleCombo, "User = user access, Admin = admin access"),
         };
@@ -450,10 +476,12 @@ public class AdminPage extends BasePage {
                     || (roleFilter.equals(User.PENDING) ? u.isPending() : u.getRole().equals(roleFilter));
             boolean searchMatches = search.isEmpty()
                     || u.getFullName().toLowerCase().contains(search)
-                    || u.getUsername().contains(search);
+                    || u.getUsername().contains(search)
+                    || (u.getEmail() != null && u.getEmail().toLowerCase().contains(search));
             if (chipMatches && searchMatches) {
                 shownUsers.add(u);
-                userModel.addRow(new Object[] {u.getFullName(), "@" + u.getUsername(), u.getRole(),
+                String email = u.getEmail() == null || u.getEmail().trim().isEmpty() ? "—" : u.getEmail().trim();
+                userModel.addRow(new Object[] {u.getFullName(), "@" + u.getUsername(), email, u.getRole(),
                         u.getStatus(), lastLogin(u.getLastLogin())});
             }
         }
@@ -611,18 +639,23 @@ public class AdminPage extends BasePage {
     private void addUser() {
         String name = nameField.getText().trim();
         String username = usernameField.getText().trim().toLowerCase();
+        String email = emailField.getText().trim();
         String password = new String(passwordField.getPassword());
         String role = (String) roleCombo.getSelectedItem();
         try {
             String problem = auth.checkNewUser(name, username, password);
+            if (problem == null) {
+                problem = AuthService.checkEmail(email, false);   // optional here, but it must look right
+            }
             if (problem != null) {
                 showAddMessage(problem, false);
                 return;
             }
-            userDAO.addUser(name, username, password, role, User.ACTIVE);
+            userDAO.addUser(name, username, email.isEmpty() ? null : email, password, role, User.ACTIVE);
             ActivityDAO.record("added " + role.toLowerCase() + " @" + username);
             nameField.setText("");
             usernameField.setText("");
+            emailField.setText("");
             passwordField.setText("");
             roleFilter = "All";
             searchField.setText("");
@@ -678,6 +711,48 @@ public class AdminPage extends BasePage {
             refreshData();
         } catch (SQLException e) {
             showError("Could not change the role.", e);
+        }
+    }
+
+    /** Changes the selected user's email (empty = remove it) */
+    private void editEmailOfSelected() {
+        User u = selectedUser();
+        if (u == null) {
+            return;
+        }
+        JTextField field = new JTextField(u.getEmail() == null ? "" : u.getEmail(), 26);
+        Theme.styleField(field);
+        Theme.setPlaceholder(field, "name@example.com");
+        JPanel panel = new JPanel(new BorderLayout(0, 8));
+        panel.add(new JLabel("Email for " + u.getFullName() + " (@" + u.getUsername() + "):"), BorderLayout.NORTH);
+        panel.add(field, BorderLayout.CENTER);
+        JLabel hint = new JLabel("Leave it empty to remove the email.");
+        hint.setFont(Theme.regular(12));
+        hint.setForeground(Theme.MUTED);
+        panel.add(hint, BorderLayout.SOUTH);
+        javax.swing.SwingUtilities.invokeLater(field::requestFocusInWindow);
+        int choice = JOptionPane.showConfirmDialog(this, panel, "Edit email",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (choice != JOptionPane.OK_OPTION) {
+            return;
+        }
+        String email = field.getText().trim();
+        String problem = AuthService.checkEmail(email, false);
+        if (problem != null) {
+            showInfo(problem + " Nothing was changed.");
+            return;
+        }
+        String before = u.getEmail() == null ? "" : u.getEmail().trim();
+        if (email.equals(before)) {
+            return;   // nothing changed
+        }
+        try {
+            userDAO.setEmail(u.getId(), email);
+            ActivityDAO.record(email.isEmpty() ? "removed the email of @" + u.getUsername()
+                                               : "changed the email of @" + u.getUsername());
+            refreshData();
+        } catch (SQLException e) {
+            showError("Could not save the email.", e);
         }
     }
 
@@ -819,6 +894,7 @@ public class AdminPage extends BasePage {
         roleButton.setText(any && u.isAdmin() ? "Make user" : "Make admin");
         roleButton.setEnabled(any && !me);
         resetButton.setEnabled(any);
+        emailButton.setEnabled(any);
         deleteButton.setEnabled(any && !me);
     }
 
@@ -862,7 +938,7 @@ public class AdminPage extends BasePage {
     private static JPanel row(String title, String note, JComponent right, boolean lineBelow) {
         JLabel t = new JLabel(title);
         t.setFont(Theme.bold(15.5f));
-        t.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));   // room for the last letter (bold Poppins runs wide)
+        t.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));   // room for the last letter (bold text runs wide)
         t.setForeground(Theme.TITLE);
         WrapLabel n = new WrapLabel(note);   // long notes wrap instead of being cut
         n.setFont(Theme.regular(13.5f));
@@ -1176,14 +1252,16 @@ public class AdminPage extends BasePage {
 
             JLabel t = new JLabel(title);
             t.setFont(Theme.semibold(15));
-            t.setForeground(Theme.TITLE);
+            t.setForeground(Color.WHITE);
             t.setIcon(new javax.swing.Icon() {     // the small colored square before the title
                 public int getIconWidth()  { return 10; }
                 public int getIconHeight() { return 10; }
                 public void paintIcon(Component c, Graphics g, int x, int y) {
                     Graphics2D g2 = (Graphics2D) g.create();
                     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2.setColor(OverviewCard.this.c1);
+                    g2.setColor(new Color(255, 255, 255, 64));          // a soft white ring
+                    g2.fillRoundRect(x - 2, y - 2, 14, 14, 6, 6);
+                    g2.setColor(OverviewCard.this.c2);
                     g2.fillRoundRect(x, y, 10, 10, 3, 3);
                     g2.dispose();
                 }
@@ -1191,16 +1269,27 @@ public class AdminPage extends BasePage {
             t.setIconTextGap(10);
             t.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
             subtitle.setFont(Theme.regular(12.5f));
-            subtitle.setForeground(Theme.MUTED);
+            subtitle.setForeground(Theme.ON_DARK_SUB);
             subtitle.setBorder(BorderFactory.createEmptyBorder(0, 20, 0, 0));
             JPanel titles = new JPanel(new GridLayout(2, 1));
             titles.setOpaque(false);
             titles.add(t);
             titles.add(subtitle);
 
-            JPanel head = new JPanel(new BorderLayout(8, 0));
+            // the purple card header (same as every Card), clipped to the round top corners
+            JPanel head = new JPanel(new BorderLayout(8, 0)) {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.clip(java.awt.geom.AffineTransform.getTranslateInstance(-getX(), -getY())
+                            .createTransformedShape(OverviewCard.this.cardShape()));
+                    tala.ui.components.Card.paintPurpleHeader(g2, 0, 0, getWidth(), getHeight());
+                    g2.dispose();
+                }
+            };
             head.setOpaque(false);
-            head.setBorder(BorderFactory.createEmptyBorder(12, 14, 8, 14));
+            head.setBorder(BorderFactory.createEmptyBorder(12, 16, 10, 16));
             head.add(titles, BorderLayout.CENTER);
             badgeSlot.setOpaque(false);
             head.add(badgeSlot, BorderLayout.EAST);
@@ -1223,6 +1312,7 @@ public class AdminPage extends BasePage {
                     BorderFactory.createEmptyBorder(6, 12, 0, 12)));
 
             add(head, BorderLayout.NORTH);
+            scroll.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
             add(scroll, BorderLayout.CENTER);
             add(foot, BorderLayout.SOUTH);
         }
@@ -1239,6 +1329,7 @@ public class AdminPage extends BasePage {
             badgeSlot.removeAll();
             Badge b = new Badge(text, soft, c1);
             b.setFont(Theme.semibold(12));
+            b.setOnDark(true);
             badgeSlot.add(b);
         }
 

@@ -23,7 +23,7 @@ import java.util.List;
 public class UserDAO {
 
     private static final String COLUMNS =
-            "user_id, full_name, username, role, status, last_login";
+            "user_id, full_name, username, email, role, status, last_login";
 
     /** Every user, admins first, then by name */
     public List<User> getAllUsers() throws SQLException {
@@ -70,15 +70,33 @@ public class UserDAO {
     /** Saves a new user. The password is hashed here, never stored as typed. */
     public void addUser(String fullName, String username, String password, String role,
                         String status) throws SQLException {
-        String sql = "INSERT INTO users (full_name, username, password_hash, role, status)"
-                   + " VALUES (?, ?, ?, ?, ?)";
+        addUser(fullName, username, null, password, role, status);
+    }
+
+    /** Saves a new user with an email address (from the Sign up page); email may be null */
+    public void addUser(String fullName, String username, String email, String password, String role,
+                        String status) throws SQLException {
+        String sql = "INSERT INTO users (full_name, username, email, password_hash, role, status)"
+                   + " VALUES (?, ?, ?, ?, ?, ?)";
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, fullName);
             ps.setString(2, username);
-            ps.setString(3, PasswordUtil.hash(password));
-            ps.setString(4, role);
-            ps.setString(5, status);
+            ps.setString(3, email);
+            ps.setString(4, PasswordUtil.hash(password));
+            ps.setString(5, role);
+            ps.setString(6, status);
+            ps.executeUpdate();
+        }
+    }
+
+    /** Changes (or with null / empty, removes) a user's email address */
+    public void setEmail(int userId, String email) throws SQLException {
+        String mail = email == null || email.trim().isEmpty() ? null : email.trim();
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement("UPDATE users SET email = ? WHERE user_id = ?")) {
+            ps.setString(1, mail);
+            ps.setInt(2, userId);
             ps.executeUpdate();
         }
     }
@@ -139,6 +157,7 @@ public class UserDAO {
                 rs.getInt("user_id"),
                 rs.getString("full_name"),
                 rs.getString("username"),
+                rs.getString("email"),
                 rs.getString("role"),
                 rs.getString("status"),
                 last == null ? null : last.toLocalDateTime());

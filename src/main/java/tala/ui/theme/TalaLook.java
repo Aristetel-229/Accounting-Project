@@ -70,6 +70,7 @@ public final class TalaLook {
                 BorderFactory.createLineBorder(new Color(0x4c1d95)),
                 BorderFactory.createEmptyBorder(6, 10, 6, 10)));
         UIManager.put("ScrollBarUI", TalaScrollBarUI.class.getName());
+        UIManager.put("ScrollPaneUI", SmoothScrollPaneUI.class.getName());   // the mouse wheel glides
 
         // message-box icons: round badges in the TALA colors instead of Metal's old pictures
         UIManager.put("OptionPane.questionIcon", new BadgeIcon("?", Theme.VIOLET, Color.WHITE));

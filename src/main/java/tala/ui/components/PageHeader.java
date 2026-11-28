@@ -21,7 +21,8 @@ import java.awt.GridBagLayout;
  *   Journal Entry                                  [ Refresh ] [ Add ... ]
  *   One-line explanation of the page (soft grey)
  *
- * Title: 24px bold, deep ink. Description: 13.5px, #8a83a3, at most ~560px wide.
+ * Title: 23px bold, deep ink. Description: 13px, #7d7696, at most ~580px wide.
+ * A hairline runs under the whole block.
  * The action buttons sit on the right and keep their own style
  * (white, yellow or red), exactly like the design.
  * (iconName is kept so the pages did not need to change.)
@@ -34,15 +35,18 @@ public class PageHeader extends JPanel {
     public PageHeader(String iconName, String title, String descriptionText) {
         super(new BorderLayout(16, 0));
         setOpaque(false);
-        setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
+        // a hairline under the title block (border-bottom: 1px solid #e7e2f1; padding-bottom: 14px)
+        setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, new java.awt.Color(0xe4ddf1)),
+                BorderFactory.createEmptyBorder(0, 0, 14, 0)));
 
         JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(Theme.bold(24));
+        titleLabel.setFont(Theme.bold(23));
         titleLabel.setForeground(Theme.TITLE);
         titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 8));   // right: room for the last glyph
 
-        description.setFont(Theme.regular(13.5f));
-        description.setForeground(Theme.FAINT);
+        description.setFont(Theme.regular(13f));
+        description.setForeground(new java.awt.Color(0x7d7696));
         setDescription(descriptionText);
 
         JPanel texts = new JPanel() {

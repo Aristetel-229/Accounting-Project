@@ -106,6 +106,8 @@ public class GeneralLedgerPage extends BasePage {
         AppButton refresh = new AppButton("Refresh", Icons.get(Icons.REFRESH, 16, Theme.PURPLE_DEEP), AppButton.Style.SECONDARY);
         refresh.addActionListener(e -> refreshData());
         header.addAction(refresh);
+        header.addAction(new tala.ui.components.ExportMenu("General Ledger",
+                () -> export("csv"), () -> export("xlsx"), this::printLedger));
         addSection(header);
 
         // ================= left card =================
@@ -152,7 +154,7 @@ public class GeneralLedgerPage extends BasePage {
         // one account: rows scroll, the Total / ending row stays at the bottom
         totalTable = new TalaTable(totalModel) {
             @Override protected boolean rowBold(int row) { return true; }
-            @Override protected Color rowBackground(int row, boolean selected) { return Theme.CREAM; }
+            @Override protected Color rowBackground(int row, boolean selected) { return Theme.HEAD_BG; }
             @Override protected Color cellForeground(int row, int column) {
                 return column == 5 && selectedIsAbnormal ? Theme.AMBER : Theme.TITLE;
             }
@@ -164,7 +166,7 @@ public class GeneralLedgerPage extends BasePage {
         JPanel totalStrip = new JPanel(new BorderLayout());
         totalStrip.setOpaque(false);
         totalStrip.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(1, 0, 0, 0, Theme.CREAM_LINE),
+                BorderFactory.createMatteBorder(2, 0, 0, 0, new Color(0xc4b0ee)),
                 BorderFactory.createEmptyBorder(0, 0, 0, 12)));
         totalStrip.add(totalTable, BorderLayout.CENTER);
         JPanel oneView = new JPanel(new BorderLayout());
@@ -420,6 +422,74 @@ public class GeneralLedgerPage extends BasePage {
                 g2.fillRoundRect(0, 12, 3, getHeight() - 24, 3, 3);
             }
             g2.dispose();
+        }
+    }
+
+    // =================================================================
+    //  Export (CSV, colored Excel, PDF / print): every account's ledger
+    // =================================================================
+
+    private String periodLabel() {
+        try {
+            return mainFrame.getSettingsDAO().getAccountingPeriod().getLabel();
+        } catch (java.sql.SQLException e) {
+            return "All dates";
+        }
+    }
+
+    private void export(String extension) {
+        if (usedAccounts.isEmpty()) {
+            showInfo("No account has been used yet, so there is no ledger to export.");
+            return;
+        }
+        java.io.File file = chooseExportFile("Export the General Ledger",
+                "TALA-General-Ledger-" + periodLabel().replaceAll("[^A-Za-z0-9]+", "-").replaceAll("-+$", ""), extension);
+        if (file == null) {
+            return;
+        }
+        try {
+            if (extension.equals("xlsx")) {
+                tala.service.ReportExcel.writeLedger(usedAccounts, entries, accounting, periodLabel(), file);
+            } else {
+                writeCsv(file);
+            }
+            showSaved(file);
+        } catch (java.io.IOException ex) {
+            showError("Could not save the file. If it is open in Excel, close it and try again.", ex);
+        }
+    }
+
+    /** Plain CSV: every posting of every account, with its running balance */
+    private void writeCsv(java.io.File file) throws java.io.IOException {
+        try (java.io.PrintWriter out = new java.io.PrintWriter(file, "UTF-8")) {
+            out.print('﻿');
+            out.println("Code,Account,Date,Description,Reference,Debit,Credit,Balance,Side");
+            for (Account a : usedAccounts) {
+                BigDecimal dr = BigDecimal.ZERO, cr = BigDecimal.ZERO, end = BigDecimal.ZERO;
+                for (LedgerRow r : accounting.buildLedger(a, entries)) {
+                    out.println(a.getCode() + "," + csv(a.getName()) + "," + tala.util.DateUtil.toInput(r.getDate()) + ","
+                            + csv(r.getDescription()) + "," + csv(r.getReferenceNo()) + "," + csvAmount(r.getDebit()) + ","
+                            + csvAmount(r.getCredit()) + "," + r.getRunningBalance().abs().setScale(2, java.math.RoundingMode.HALF_UP)
+                            + "," + tala.service.AccountingService.sideOf(a, r.getRunningBalance()));
+                    dr = dr.add(r.getDebit());
+                    cr = cr.add(r.getCredit());
+                    end = r.getRunningBalance();
+                }
+                out.println(a.getCode() + "," + csv(a.getName() + " - Total") + ",,,," + csvAmount(dr) + "," + csvAmount(cr) + ","
+                        + end.abs().setScale(2, java.math.RoundingMode.HALF_UP) + "," + tala.service.AccountingService.sideOf(a, end));
+            }
+        }
+    }
+
+    private void printLedger() {
+        if (usedAccounts.isEmpty()) {
+            showInfo("No account has been used yet, so there is no ledger to print.");
+            return;
+        }
+        try {
+            tala.service.ReportPrint.ledger(usedAccounts, entries, accounting, periodLabel());
+        } catch (java.io.IOException ex) {
+            showError("Could not open the print page.", ex);
         }
     }
 }

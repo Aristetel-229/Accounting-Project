@@ -39,16 +39,16 @@ import java.util.zip.ZipOutputStream;
  */
 public final class WorksheetExcel {
 
-    private static final String[] GROUPS = {"Unadjusted", "Adjustments", "Adjusted",
+    private static final String[] GROUPS = {"Unadjusted trial balance", "Adjustments", "Adjusted trial balance",
             "Income statement", "Owner's equity", "Balance sheet"};
     /** per group: { header fill, Dr/Cr row fill, text color } */
     private static final String[][] GROUP_COLORS = {
-        {"EDE7FB", "F6F2FF", "4C1D95"},   // Unadjusted: lilac
-        {"FFF1C2", "FFF9E6", "8A6200"},   // Adjustments: yellow
-        {"E2D6FA", "F1ECFD", "5B21B6"},   // Adjusted: purple
-        {"DDF3E5", "F2FBF5", "1F7A45"},   // Income statement: green
-        {"DFE8FC", "F3F6FE", "2F56C4"},   // Owner's equity: blue
-        {"FBE0E5", "FEF5F6", "B4233C"},   // Balance sheet: rose
+        {"EFE9FD", "F7F4FE", "5B21B6"},   // Unadjusted trial balance: violet
+        {"FDF4DC", "FEF9EC", "B7791F"},   // Adjustments: amber
+        {"E8ECFC", "F3F5FE", "3046B8"},   // Adjusted trial balance: blue
+        {"E5F5EC", "F2FAF5", "15803D"},   // Income statement: green
+        {"FCE8EF", "FEF3F7", "B4235E"},   // Owner's equity: rose
+        {"E0F3F2", "EFF9F8", "0F766E"},   // Balance sheet: teal
     };
     private static final int COLS = 2 + WorksheetRow.CELL_COUNT;   // A..N
     private static final int FIRST_DATA_ROW = 6;
@@ -63,9 +63,9 @@ public final class WorksheetExcel {
         String last = col(COLS - 1);
 
         // ---- 1-2: title banner + period line
-        int title = st.xf(st.font(true, false, 16, "FFFFFF"), st.fill("5B21B6"), 0, 0, "left", false);
+        int title = st.xf(st.font(true, false, 16, "FFFFFF"), st.gradient("2E0F6B", "6D28D9"), 0, 0, "left", false);
         int sub = st.xf(st.font(false, true, 10, "5C5577"), st.fill("EFE8FF"), 0, 0, "left", false);
-        int titleFill = st.xf(0, st.fill("5B21B6"), 0, 0, null, false);
+        int titleFill = st.xf(0, st.gradient("2E0F6B", "6D28D9"), 0, 0, null, false);
         int subFill = st.xf(0, st.fill("EFE8FF"), 0, 0, null, false);
         StringBuilder r1 = new StringBuilder(text(1, 0, title, "TALA · 12-Column Worksheet"));
         StringBuilder r2 = new StringBuilder(text(2, 0, sub, "Accounting period: " + periodLabel
@@ -90,7 +90,7 @@ public final class WorksheetExcel {
         for (int g = 0; g < GROUPS.length; g++) {
             int ink = st.font(true, false, 11, GROUP_COLORS[g][2]);
             int top = st.xf(ink, st.fill(GROUP_COLORS[g][0]),
-                    st.border("medium:A78BFA", "thin:C9B8F5", "thin:C9B8F5", "thin:C9B8F5"), 0, "center", false);
+                    st.border("medium:A78BFA", "thin:C9B8F5", "thick:" + GROUP_COLORS[g][2], "thin:C9B8F5"), 0, "center", false);
             int subDr = st.xf(st.font(true, false, 10, GROUP_COLORS[g][2]), st.fill(GROUP_COLORS[g][1]),
                     st.border("medium:A78BFA", "thin:E4DDF2", "thin:C9B8F5", "medium:A78BFA"), 0, "right", false);
             int subCr = st.xf(st.font(true, false, 10, GROUP_COLORS[g][2]), st.fill(GROUP_COLORS[g][1]),
@@ -113,9 +113,9 @@ public final class WorksheetExcel {
             boolean account = WorksheetRow.ACCOUNT.equals(kind);
             boolean grand = WorksheetRow.GRAND_TOTAL.equals(kind);
             boolean total = WorksheetRow.TOTAL.equals(kind);
-            String fill = account ? (index % 2 == 1 ? "FBF9FF" : "FFFFFF") : grand ? "FBF7E6" : "FFF8DC";
-            String topLine = total || grand ? "medium:D9C58A" : "thin:E4DDF2";
-            String bottomLine = grand ? "double:D4B23A" : "thin:E4DDF2";
+            String fill = account ? (index % 2 == 1 ? "FBF9FF" : "FFFFFF") : grand ? "EFE7FF" : "FAF8FF";
+            String topLine = total ? "medium:2E1065" : "thin:E4DDF2";
+            String bottomLine = grand ? "double:2E1065" : "thin:E4DDF2";
             boolean bold = !account;
 
             int codeStyle = st.xf(st.font(bold || account, false, 11, "231B3A"), st.fill(fill),
@@ -129,8 +129,10 @@ public final class WorksheetExcel {
             cells.append(text(r, 1, nameStyle, wr.getName() == null ? "" : wr.getName()));
             for (int c = 0; c < WorksheetRow.CELL_COUNT; c++) {
                 boolean dr = c % 2 == 0;
-                String ink = account ? (dr ? "6D4FC9" : "A8740C") : "231B3A";
-                String cellFill = fill;
+                String ink = account ? (dr ? "6D4FC9" : "A8740C") : "2E1065";
+                // each group keeps its soft color down the whole column
+                String cellFill = account ? (index % 2 == 1 ? GROUP_COLORS[c / 2][0] : GROUP_COLORS[c / 2][1])
+                        : grand ? GROUP_COLORS[c / 2][0] : GROUP_COLORS[c / 2][1];
                 if (grand && c >= WorksheetRow.BS_DR) {      // the balance sheet's final pair
                     cellFill = ws.isBalanced() ? "E8F6EE" : "FDECEF";
                     ink = ws.isBalanced() ? "1F7A45" : "B4233C";
@@ -280,7 +282,7 @@ public final class WorksheetExcel {
         private final Map<String, Integer> xfs = new LinkedHashMap<>();
 
         Styles() {
-            fonts.add("<font><sz val=\"11\"/><color rgb=\"FF2A2240\"/><name val=\"Calibri\"/><family val=\"2\"/></font>");
+            fonts.add("<font><sz val=\"11\"/><color rgb=\"FF2A2240\"/><name val=\"Arial\"/><family val=\"2\"/></font>");
             fills.add("<fill><patternFill patternType=\"none\"/></fill>");
             fills.add("<fill><patternFill patternType=\"gray125\"/></fill>");
             borders.add("<border><left/><right/><top/><bottom/><diagonal/></border>");
@@ -289,7 +291,12 @@ public final class WorksheetExcel {
 
         int font(boolean bold, boolean italic, double size, String rgb) {
             return index(fonts, "<font>" + (bold ? "<b/>" : "") + (italic ? "<i/>" : "")
-                    + "<sz val=\"" + size + "\"/><color rgb=\"FF" + rgb + "\"/><name val=\"Calibri\"/><family val=\"2\"/></font>");
+                    + "<sz val=\"" + size + "\"/><color rgb=\"FF" + rgb + "\"/><name val=\"Arial\"/><family val=\"2\"/></font>");
+        }
+
+        int gradient(String fromRgb, String toRgb) {
+            return index(fills, "<fill><gradientFill degree=\"0\"><stop position=\"0\"><color rgb=\"FF" + fromRgb
+                    + "\"/></stop><stop position=\"1\"><color rgb=\"FF" + toRgb + "\"/></stop></gradientFill></fill>");
         }
 
         int fill(String rgb) {

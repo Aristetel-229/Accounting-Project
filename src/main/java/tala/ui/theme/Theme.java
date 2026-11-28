@@ -11,9 +11,6 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GraphicsEnvironment;
-import java.awt.font.TextAttribute;
-import java.io.InputStream;
-import java.util.Collections;
 
 /**
  * Theme
@@ -24,7 +21,7 @@ import java.util.Collections;
  * design canvas): a soft lavender-to-cream page, a deep purple
  * "ledger book" sidebar, white cards with lilac outlines, purple text
  * accents and one bright yellow accent for the active page and the
- * main buttons. The font is Poppins (bundled in src/main/resources/fonts,
+ * main buttons. The font is Arial on every page (it comes with Windows,
  * so nothing has to be installed).
  *
  * Want a different look? Change the values here only.
@@ -81,7 +78,7 @@ public final class Theme {
     public static final Color MUTED         = new Color(0x7a7392);
     public static final Color FAINT         = new Color(0x8a83a3);  // page description under the title
     public static final Color LABEL         = new Color(0x4a4266);  // small form labels
-    public static final Color TABLE_HEAD    = new Color(0x4c1d95);
+    public static final Color TABLE_HEAD    = new Color(0x3b1578);
 
     // ---------------- Status colors (soft background, dark text) ----------------
     public static final Color GREEN_BG = new Color(0xe8f6ee), GREEN = new Color(0x1f7a45);
@@ -93,11 +90,24 @@ public final class Theme {
     public static final Color PURPLE_BAR = new Color(0x7c3aed);
 
     // ---------------- Light-design extras ----------------
-    public static final Color HEAD_BG       = new Color(0xefe8ff);  // table headers
+    public static final Color HEAD_BG       = new Color(0xe6dbff);  // table headers (--head)
     public static final Color SUB_HEAD_BG   = new Color(0xf6f2ff);  // second header row (worksheet)
-    public static final Color HEAD_LINE     = new Color(0xddd3f5);  // line under table headers
+    public static final Color HEAD_LINE     = new Color(0xd3c3f3);  // line under table headers
     public static final Color GRAND_BG      = new Color(0xfbf7e6);  // grand-total rows
-    public static final Color ROW_HOVER     = new Color(0xf8f4ff);
+    public static final Color ROW_HOVER     = new Color(0xe7dbfb);  // rgba(109,40,217,.10) on the card tint
+
+    // ---------------- Purple card look (design: "all cards purple") ----------------
+    public static final Color CARD_TINT     = new Color(0xf4efff);  // card body (--body)
+    public static final Color CARD_EDGE     = new Color(0xd4c4f0);  // card outline on the tint
+    public static final Color ZEBRA_ROW     = new Color(0xece4fd);  // every 2nd table row (--row)
+    public static final Color FOOT_TINT     = new Color(0xf7f3fe);  // card footer strip
+    public static final Color FOOT_LINE     = new Color(0xe1d4f7);  // line above the footer
+    public static final Color HEAD_DARK_1   = new Color(0x2e0f6b);  // card header gradient: start
+    public static final Color HEAD_DARK_2   = new Color(0x4c1d95);  //                        middle
+    public static final Color HEAD_DARK_3   = new Color(0x6d28d9);  //                        end
+    public static final Color ON_DARK_SUB   = new Color(0xd6c8fa);  // subtitles on the purple header
+    public static final Color ON_DARK_LABEL = new Color(0xe3d6ff);  // small labels on the purple header
+    public static final Color FOOT_TEXT     = new Color(0x6b6280);  // footer text (numbers are bold #2e1065)
     public static final Color CARD_HOVER_BORDER = new Color(0xa78bfa);
     public static final Color ICON_BG       = new Color(0xf4f1fa);  // icon squares on tiles
     public static final Color CRUMB         = new Color(0x6d4fc9);
@@ -119,66 +129,64 @@ public final class Theme {
     public static final Color TINT_RED    = new Color(0xfdebee), EDGE_RED    = new Color(0xefb9c4);
     public static final Color TINT_BLUE   = new Color(0xe9effd), EDGE_BLUE   = new Color(0xb4c9f5);
 
-    // ---------------- Font: Poppins ----------------
-    private static Font poppinsRegular, poppinsMedium, poppinsSemiBold, poppinsBold;
-    public static final String FONT_FAMILY = loadFonts();
+    // ---------------- Font: Arial ----------------
+    /** The app's font. Arial comes with Windows; if it is missing, a normal sans-serif font is used. */
+    public static final String FONT_FAMILY = pickFamily();
 
-    /** Loads the bundled Poppins files. If they are missing, a normal sans-serif font is used. */
-    private static String loadFonts() {
-        poppinsRegular = load("Poppins-Regular.ttf");
-        poppinsMedium = load("Poppins-Medium.ttf");
-        poppinsSemiBold = load("Poppins-SemiBold.ttf");
-        poppinsBold = load("Poppins-Bold.ttf");
-        return poppinsRegular != null ? "Poppins" : Font.SANS_SERIF;
+    private static String pickFamily() {
+        for (String name : GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames()) {
+            if (name.equalsIgnoreCase("Arial")) {
+                return name;
+            }
+        }
+        return Font.SANS_SERIF;
     }
 
-    private static Font load(String file) {
-        try (InputStream in = Theme.class.getResourceAsStream("/fonts/" + file)) {
-            InputStream src = in;
-            if (src == null) {   // not on the classpath: try the project folder
-                java.io.File f = new java.io.File("src/main/resources/fonts/" + file);
-                src = f.exists() ? new java.io.FileInputStream(f) : null;
-            }
-            if (src == null) {
-                return null;
-            }
-            Font font = Font.createFont(Font.TRUETYPE_FONT, src);
-            GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(font);
-            return font;
-        } catch (Exception e) {
-            return null;
+    /**
+     * Ready-made fonts by weight and size. Making a font is slow, and many
+     * parts ask for one every time they are painted, so each is made once.
+     */
+    private static final java.util.Map<String, Font> FONTS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static Font cached(String key, java.util.function.Supplier<Font> maker) {
+        Font f = FONTS.get(key);
+        if (f == null) {
+            f = maker.get();
+            FONTS.put(key, f);
         }
+        return f;
     }
 
     public static Font font(int style, float size) {
-        Font base = style == Font.BOLD ? poppinsBold : poppinsRegular;
-        if (base == null) {
-            return new Font(Font.SANS_SERIF, style, 1).deriveFont(style, size);
-        }
-        return base.deriveFont(Font.PLAIN, size);   // the Bold file is already bold
+        return cached((style == Font.BOLD ? "b" : "r") + size,
+                () -> new Font(FONT_FAMILY, style, 1).deriveFont(style, size));
     }
 
     public static Font regular(float size)  { return font(Font.PLAIN, size); }
     public static Font bold(float size)     { return font(Font.BOLD, size); }
 
-    /** Poppins Medium (500), used for tabs, labels and table headers */
+    /** Medium weight (tabs, labels, table text). Arial has no medium, so this is regular Arial. */
     public static Font medium(float size) {
-        return poppinsMedium == null ? regular(size) : poppinsMedium.deriveFont(Font.PLAIN, size);
+        return regular(size);
     }
 
-    /** Poppins SemiBold (600), used for small labels */
+    /** Semibold weight (small labels, headings). Arial has no semibold, so this is bold Arial. */
     public static Font semibold(float size) {
-        return poppinsSemiBold == null ? bold(size) : poppinsSemiBold.deriveFont(Font.PLAIN, size);
+        return bold(size);
     }
 
     /** A monospaced font, for reference numbers like JE-7322 */
     public static Font mono(float size) {
-        return new Font(Font.MONOSPACED, Font.BOLD, 1).deriveFont(Font.BOLD, size);
+        return cached("mono" + size, () -> new Font(Font.MONOSPACED, Font.BOLD, 1).deriveFont(Font.BOLD, size));
     }
 
-    /** A font with extra space between letters (for small UPPERCASE labels) */
+    /**
+     * Small UPPERCASE labels. With Poppins these had a little extra space
+     * between letters; Arial is snapped to whole pixels, and that extra space
+     * rounded into uneven gaps ("PO STED"), so Arial is used as it is.
+     */
     public static Font spaced(Font font, float tracking) {
-        return font.deriveFont(Collections.singletonMap(TextAttribute.TRACKING, tracking));
+        return font;
     }
 
     /** Call once at start-up: uses "PHP " if the font has no peso sign. */

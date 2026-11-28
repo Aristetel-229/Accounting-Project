@@ -29,9 +29,16 @@ public class User {
     private final String role;
     private final String status;
     private final LocalDateTime lastLogin;   // null = never logged in
+    private final String email;              // null = none given (admins add users without one)
 
     public User(int id, String fullName, String username, String role,
                 String status, LocalDateTime lastLogin) {
+        this(id, fullName, username, null, role, status, lastLogin);
+    }
+
+    public User(int id, String fullName, String username, String email, String role,
+                String status, LocalDateTime lastLogin) {
+        this.email = email;
         this.id = id;
         this.fullName = fullName;
         this.username = username;
@@ -43,6 +50,7 @@ public class User {
     public int getId()                 { return id; }
     public String getFullName()        { return fullName; }
     public String getUsername()        { return username; }
+    public String getEmail()           { return email; }
     public String getRole()            { return role; }
     public String getStatus()          { return status; }
     public LocalDateTime getLastLogin() { return lastLogin; }

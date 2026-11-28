@@ -67,6 +67,9 @@ public class MainFrame extends JFrame {
     private final SideNav sideNav = new SideNav();
     private final JButton menuButton = new MenuButton();
     private final SlideLayer slide = new SlideLayer();
+    private final FadeLayer fade = new FadeLayer();
+    private Timer fadeTimer;
+    private String currentPage = null;
     private final Map<String, BasePage> pages = new LinkedHashMap<>();
     private final User currentUser;
     private final SettingsDAO settingsDAO;
@@ -228,9 +231,45 @@ public class MainFrame extends JFrame {
         if (page == null) {
             return;
         }
+        boolean animate = currentPage != null && !name.equals(currentPage) && pageArea.isShowing()
+                && pageArea.getWidth() > 0 && (navTimer == null || !navTimer.isRunning())
+                && (fadeTimer == null || !fadeTimer.isRunning());
+        java.awt.image.BufferedImage before = animate ? snapshot(pageArea) : null;
         page.refreshData();
         cardLayout.show(pageArea, name);
         sideNav.setActive(name);
+        currentPage = name;
+        if (animate) {
+            pageArea.validate();
+            fadeIn(before, snapshot(pageArea));
+        }
+    }
+
+    /**
+     * Page change: the old page fades out while the new one fades in and
+     * glides up 10px into place (about 0.22 s). Only two pictures move on
+     * the overlay, so it stays smooth even on big pages.
+     */
+    private void fadeIn(java.awt.image.BufferedImage before, java.awt.image.BufferedImage after) {
+        java.awt.Point at = javax.swing.SwingUtilities.convertPoint(pageArea, 0, 0, getRootPane());
+        fade.start(before, after, at);
+        setGlassPane(fade);
+        fade.setVisible(true);
+        final long start = System.nanoTime();
+        final int duration = 220;
+        fadeTimer = new Timer(8, e -> {
+            float t = Math.min(1f, (System.nanoTime() - start) / 1_000_000f / duration);
+            float eased = 1f - (1f - t) * (1f - t) * (1f - t);      // ease-out (cubic)
+            fade.setFrame(eased);
+            if (t >= 1f) {
+                ((Timer) e.getSource()).stop();
+                fade.setVisible(false);
+                fade.clear();
+                pageArea.repaint();
+            }
+        });
+        fadeTimer.setCoalesce(true);
+        fadeTimer.start();
     }
 
     /** Opens the 12 Columnar page and its Add adjustment pop-up */
@@ -347,6 +386,72 @@ public class MainFrame extends JFrame {
                 g2.fillRect(edge, 0, sh, h);
                 g2.drawImage(nav, edge - navW, 0, null);
             }
+            g2.dispose();
+        }
+    }
+
+    /** The overlay that cross-fades from the old page to the new one */
+    private static class FadeLayer extends JPanel {
+        private java.awt.image.BufferedImage before, after;
+        private java.awt.Point at = new java.awt.Point();
+        private float t;
+        private boolean drawingFrame = false;
+
+        FadeLayer() {
+            setOpaque(false);
+            addMouseListener(new java.awt.event.MouseAdapter() { });   // swallow clicks while fading
+        }
+
+        void start(java.awt.image.BufferedImage before, java.awt.image.BufferedImage after, java.awt.Point at) {
+            this.before = before;
+            this.after = after;
+            this.at = at;
+            this.t = 0f;
+        }
+
+        void setFrame(float t) {
+            this.t = t;
+            if (isShowing() && after != null) {
+                java.awt.geom.AffineTransform dt = getGraphicsConfiguration() == null ? null
+                        : getGraphicsConfiguration().getDefaultTransform();
+                double scale = dt == null ? 1 : dt.getScaleX();
+                // the two pictures cover the whole page area, so Swing does not need to
+                // repaint the real page under them on every frame (that keeps it light)
+                drawingFrame = true;
+                try {
+                    paintImmediately(at.x, at.y, (int) Math.floor(after.getWidth() / scale),
+                            (int) Math.floor(after.getHeight() / scale));
+                } finally {
+                    drawingFrame = false;
+                }
+                java.awt.Toolkit.getDefaultToolkit().sync();
+            }
+        }
+
+        void clear() {
+            before = null;
+            after = null;
+        }
+
+        @Override
+        public boolean isOpaque() {
+            return drawingFrame;
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            if (before == null || after == null) {
+                return;
+            }
+            Graphics2D g2 = (Graphics2D) g.create();
+            java.awt.geom.AffineTransform tr = g2.getTransform();
+            double scale = tr.getScaleX();
+            g2.setTransform(java.awt.geom.AffineTransform.getTranslateInstance(tr.getTranslateX(), tr.getTranslateY()));
+            int x = (int) Math.round(at.x * scale), y = (int) Math.round(at.y * scale);
+            g2.clipRect(x, y, after.getWidth(), after.getHeight());
+            g2.drawImage(before, x, y, null);
+            g2.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, Math.max(0f, Math.min(1f, t))));
+            g2.drawImage(after, x, y + (int) Math.round((1f - t) * 10 * scale), null);
             g2.dispose();
         }
     }

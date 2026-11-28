@@ -41,6 +41,9 @@ import java.util.Set;
  */
 public class TalaTable extends JTable {
 
+    /** The hairline under each row (a touch deeper than the lavender card) */
+    private static final Color ROW_RULE = new Color(0xe8e0f7);
+
     private final Set<Integer> rightAligned = new HashSet<>();
     private final Set<Integer> pillColumns = new HashSet<>();
     private final Set<Integer> wrapColumns = new HashSet<>();
@@ -63,12 +66,12 @@ public class TalaTable extends JTable {
         setOpaque(false);                         // the white card shows behind the rows
         setBackground(new Color(0, 0, 0, 0));
         setSelectionBackground(Theme.SELECTED_ROW);
-        setGridColor(Theme.ROW_LINE);
+        setGridColor(ROW_RULE);
 
         JTableHeader header = getTableHeader();
         header.setReorderingAllowed(false);
         header.setDefaultRenderer(new HeaderRenderer());
-        header.setPreferredSize(new Dimension(10, 40));
+        header.setPreferredSize(new Dimension(10, 38));
         header.setOpaque(true);
         header.setBackground(Theme.HEAD_BG);
 
@@ -284,13 +287,27 @@ public class TalaTable extends JTable {
 
     // ------------------------------------------------------------ renderers
 
-    /** White (or fully see-through) means "no fill": the card shows. Hovered rows turn lilac. */
+    private boolean zebra = true;
+
+    /** Soft stripes on every second row (on by default, like the design) */
+    public void setZebra(boolean zebra) {
+        this.zebra = zebra;
+        repaint();
+    }
+
+    /**
+     * White (or fully see-through) means "no fill": the lavender card shows,
+     * with a slightly deeper tint on every second row. Hovered rows turn lilac.
+     */
     private Color fillFor(Color c, int row, boolean selected) {
         boolean plain = c == null || c.getAlpha() == 0 || Color.WHITE.equals(c);
         if (row == hoverRow && !selected) {
-            return plain ? Theme.ROW_HOVER : Theme.mix(c, new Color(0xe9defe), 0.35f);
+            return plain ? Theme.ROW_HOVER : Theme.mix(c, new Color(0xe2d4fb), 0.35f);
         }
-        return plain ? null : c;
+        if (plain) {
+            return zebra && row % 2 == 1 ? Theme.ZEBRA_ROW : null;
+        }
+        return c;
     }
 
     /** Draws normal cells and pill cells */
@@ -298,12 +315,17 @@ public class TalaTable extends JTable {
         private final PillLabel pill = new PillLabel();
         private Color cellFill;
 
+        /** One reusable padding border per indent (making borders for every cell was slow) */
+        private final java.util.Map<Integer, javax.swing.border.Border> paddings = new java.util.HashMap<>();
+
         @Override
         protected void paintComponent(Graphics g) {
             if (cellFill != null) {
                 g.setColor(cellFill);
                 g.fillRect(0, 0, getWidth(), getHeight());
             }
+            g.setColor(ROW_RULE);                       // the hairline under the row
+            g.fillRect(0, getHeight() - 1, getWidth(), 1);
             super.paintComponent(g);
         }
 
@@ -331,9 +353,9 @@ public class TalaTable extends JTable {
             setOpaque(false);
             cellFill = fillFor(background, row, selected);
             setHorizontalAlignment(rightAligned.contains(modelColumn) ? SwingConstants.RIGHT : SwingConstants.LEFT);
-            setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.ROW_LINE),
-                    BorderFactory.createEmptyBorder(0, cellPadding + cellIndent(row, modelColumn), 0, cellPadding)));
+            int left = cellPadding + cellIndent(row, modelColumn);
+            setBorder(paddings.computeIfAbsent(left * 1000 + cellPadding,
+                    k -> BorderFactory.createEmptyBorder(0, left, 1, cellPadding)));
             return this;
         }
     }
@@ -371,7 +393,7 @@ public class TalaTable extends JTable {
                 g2.setColor(cellColor);
                 g2.fillRect(0, 0, getWidth(), getHeight());
             }
-            g2.setColor(Theme.ROW_LINE);
+            g2.setColor(ROW_RULE);
             g2.fillRect(0, getHeight() - 1, getWidth(), 1);
 
             int textWidth = g2.getFontMetrics(getFont()).stringWidth(getText());
@@ -385,20 +407,23 @@ public class TalaTable extends JTable {
         }
     }
 
-    /** Lilac column headers with a line under them */
+    /** Lilac column headers in small capitals (#e6dbff, ink #3b1578) with a line under them */
     private class HeaderRenderer extends DefaultTableCellRenderer {
+        private final java.awt.Font headFont = Theme.spaced(Theme.semibold(11f), 0.05f);
+
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean selected,
                                                        boolean focused, int row, int column) {
-            super.getTableCellRendererComponent(table, value, false, false, row, column);
-            setFont(Theme.semibold(13f));
+            String text = value == null ? "" : value.toString().toUpperCase(java.util.Locale.ROOT);
+            super.getTableCellRendererComponent(table, text, false, false, row, column);
+            setFont(headFont);
             setForeground(Theme.TABLE_HEAD);
             setBackground(Theme.HEAD_BG);
             setOpaque(true);
             int modelColumn = convertColumnIndexToModel(column);
             setHorizontalAlignment(rightAligned.contains(modelColumn) ? SwingConstants.RIGHT : SwingConstants.LEFT);
             setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createMatteBorder(0, 0, 2, 0, Theme.HEAD_LINE),
+                    BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.HEAD_LINE),
                     BorderFactory.createEmptyBorder(0, cellPadding, 0, cellPadding)));
             return this;
         }

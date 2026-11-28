@@ -64,6 +64,7 @@ public class DatabaseSetup {
             + " user_id INT AUTO_INCREMENT PRIMARY KEY,"
             + " full_name VARCHAR(100) NOT NULL,"
             + " username VARCHAR(40) NOT NULL UNIQUE,"
+            + " email VARCHAR(120) NULL,"
             + " password_hash VARCHAR(100) NOT NULL,"
             + " role ENUM('User','Admin') NOT NULL DEFAULT 'User',"
             + " status ENUM('Active','Pending','Inactive') NOT NULL DEFAULT 'Active',"
@@ -240,6 +241,15 @@ public class DatabaseSetup {
                     roleType = rs.getString(1);
                 }
             }
+            // the Sign up page asks for an email address (older databases have no column for it)
+            try (ResultSet rs = st.executeQuery(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS"
+                    + " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'email'")) {
+                if (rs.next() && rs.getInt(1) == 0) {
+                    st.executeUpdate("ALTER TABLE users ADD COLUMN email VARCHAR(120) NULL AFTER username");
+                }
+            }
+
             if (roleType.contains("'Student'")) {
                 // allow both for a moment, move everyone over, then remove 'Student'
                 st.executeUpdate("ALTER TABLE users MODIFY role ENUM('Student','User','Admin') NOT NULL DEFAULT 'User'");

@@ -31,7 +31,8 @@ public final class Icons {
             FILE = "file", SLIDERS = "sliders", BULB = "bulb", CHECK = "check", CIRCLE = "circle",
             CHEVRON = "chevron", CLOSE = "close", SCALE = "scale", ARROW = "arrow",
             SHIELD = "shield", USER = "user", USERS = "users", LOCK = "lock", LOGOUT = "logout",
-            DATABASE = "database", KEY = "key", CLOCK = "clock", CALENDAR = "calendar";
+            DATABASE = "database", KEY = "key", CLOCK = "clock", CALENDAR = "calendar",
+            SHEET = "sheet", PRINTER = "printer", CHEVRON_DOWN = "chevronDown", AT = "at", MAIL = "mail";
 
     private Icons() { }
 
@@ -161,6 +162,29 @@ public final class Icons {
                     break;
                 case CHEVRON:
                     g.draw(path(9, 6, 15, 12, 9, 18));
+                    break;
+                case AT:               // "@": a ring with a tail
+                    g.draw(new Ellipse2D.Double(8, 8, 8, 8));
+                    g.draw(path(16, 8, 16, 13.5, 17.5, 15.5, 19.5, 15.5, 21, 13.5, 21, 12));
+                    g.draw(new Arc2D.Double(3, 3, 18, 18, 0, 300, Arc2D.OPEN));
+                    break;
+                case MAIL:             // an envelope
+                    g.draw(new RoundRectangle2D.Double(3, 5, 18, 14, 3, 3));
+                    g.draw(path(3.5, 6.5, 12, 13, 20.5, 6.5));
+                    break;
+                case CHEVRON_DOWN:
+                    g.draw(path(6, 9, 12, 15, 18, 9));
+                    break;
+                case SHEET:            // a spreadsheet: rounded box with a header row and columns
+                    g.draw(new RoundRectangle2D.Double(3, 3, 18, 18, 4, 4));
+                    g.draw(new Line2D.Double(3, 9, 21, 9));
+                    g.draw(new Line2D.Double(3, 15, 21, 15));
+                    g.draw(new Line2D.Double(10, 9, 10, 21));
+                    break;
+                case PRINTER:
+                    g.draw(path(6, 9, 6, 2, 18, 2, 18, 9));
+                    g.draw(path(6, 18, 4, 18, 4, 9, 20, 9, 20, 18, 18, 18));
+                    g.draw(new java.awt.geom.Rectangle2D.Double(6, 14, 12, 8));
                     break;
                 case CLOSE:
                     g.draw(new Line2D.Double(6, 6, 18, 18));

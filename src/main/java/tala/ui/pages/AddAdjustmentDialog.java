@@ -107,7 +107,7 @@ public class AddAdjustmentDialog extends JDialog {
         getRootPane().registerKeyboardAction(e -> dispose(),
                 KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
-        setSize(660, 640);   // room for the Poppins font
+        setSize(660, 640);   // room for the form
         setResizable(false);
         setLocationRelativeTo(owner);
     }

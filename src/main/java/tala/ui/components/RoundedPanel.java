@@ -140,19 +140,7 @@ public class RoundedPanel extends JPanel {
         // 1) soft purple shadow: "0 1px 2px .06, 0 6px 14px .08, 0 18px 36px -12px .18"
         //    it gets deeper while hovered (and the card has risen above it)
         if (shadow) {
-            Graphics2D s = (Graphics2D) g2.create();
-            s.translate(0, up);    // the shadow stays on the "table"
-            int layers = 7;
-            for (int i = layers; i >= 1; i--) {
-                float k = i / (float) layers;
-                int alpha = Math.round((5 + 6 * t) * (1f - k * 0.75f));
-                s.setColor(new Color(46, 16, 101, alpha));
-                float grow = k * (1.5f + t);
-                float drop = 1 + k * (4 + 3 * t);
-                s.fill(new RoundRectangle2D.Float(x - grow, y + drop - grow * 0.3f, w + grow * 2, h + grow,
-                        arc + grow * 2, arc + grow * 2));
-            }
-            s.dispose();
+            paintShadow(g2, x, y, w, h, arc, t, up);
         }
 
         // 2) background: white, a plain color, or a diagonal gradient
@@ -179,5 +167,70 @@ public class RoundedPanel extends JPanel {
         }
         g2.dispose();
         super.paintComponent(g);
+    }
+
+    // ---------------------------------------------------------------- shadow pictures
+
+    /**
+     * The soft shadow is 7 see-through rounded shapes, which are slow to draw.
+     * They are drawn once per card size (and hover step) into a picture at the
+     * screen's own resolution; after that the picture is simply copied.
+     */
+    private static final java.util.Map<String, java.awt.image.BufferedImage> SHADOWS =
+            new java.util.LinkedHashMap<String, java.awt.image.BufferedImage>(64, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(java.util.Map.Entry<String, java.awt.image.BufferedImage> eldest) {
+                    return size() > 80;
+                }
+            };
+
+    private void paintShadow(Graphics2D g2, int x, int y, int w, int h, int arc, float t, float up) {
+        java.awt.geom.AffineTransform tr = g2.getTransform();
+        double scale = tr.getScaleX();
+        boolean simple = tr.getShearX() == 0 && tr.getShearY() == 0 && scale == tr.getScaleY() && scale > 0 && scale <= 4;
+        int step = Math.round(Math.max(0f, Math.min(1f, t)) * 8);   // 9 hover steps are plenty
+        float ts = step / 8f;
+        if (!simple) {
+            drawShadowLayers(g2, x, y + up, w, h, arc, ts);
+            return;
+        }
+        int cw = getWidth(), ch = getHeight();
+        String key = cw + "x" + ch + "r" + arc + "t" + step + "@" + scale;
+        java.awt.image.BufferedImage img;
+        synchronized (SHADOWS) {
+            img = SHADOWS.get(key);
+        }
+        if (img == null) {
+            int pw = (int) Math.ceil(cw * scale), ph = (int) Math.ceil(ch * scale);
+            img = new java.awt.image.BufferedImage(Math.max(1, pw), Math.max(1, ph),
+                    java.awt.image.BufferedImage.TYPE_INT_ARGB_PRE);
+            Graphics2D ig = img.createGraphics();
+            ig.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            ig.scale(scale, scale);
+            drawShadowLayers(ig, x, y, w, h, arc, ts);
+            ig.dispose();
+            synchronized (SHADOWS) {
+                SHADOWS.put(key, img);
+            }
+        }
+        Graphics2D d = (Graphics2D) g2.create();
+        d.setTransform(java.awt.geom.AffineTransform.getTranslateInstance(tr.getTranslateX(),
+                tr.getTranslateY() + Math.round(up * scale)));
+        d.drawImage(img, 0, 0, null);
+        d.dispose();
+    }
+
+    /** soft purple shadow: "0 1px 2px .06, 0 6px 14px .08, 0 18px 36px -12px .18", deeper while hovered */
+    private static void drawShadowLayers(Graphics2D s, float x, float y, int w, int h, int arc, float t) {
+        int layers = 7;
+        for (int i = layers; i >= 1; i--) {
+            float k = i / (float) layers;
+            int alpha = Math.round((5 + 6 * t) * (1f - k * 0.75f));
+            s.setColor(new Color(46, 16, 101, alpha));
+            float grow = k * (1.5f + t);
+            float drop = 1 + k * (4 + 3 * t);
+            s.fill(new RoundRectangle2D.Float(x - grow, y + drop - grow * 0.3f, w + grow * 2, h + grow,
+                    arc + grow * 2, arc + grow * 2));
+        }
     }
 }

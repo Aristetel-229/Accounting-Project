@@ -84,10 +84,14 @@ public class AuthService {
      * Someone creates their own (User) account from the log-in screen.
      * Returns a message for the screen; throws IllegalArgumentException if a rule is broken.
      */
-    public String signUp(String fullName, String username, String password, String confirm)
+    public String signUp(String fullName, String username, String email, String password, String confirm)
             throws SQLException {
         String user = username == null ? "" : username.trim().toLowerCase();
+        String mail = email == null ? "" : email.trim();
         String problem = checkNewUser(fullName, user, password);
+        if (problem == null) {
+            problem = checkEmail(mail, true);
+        }
         if (problem == null && !password.equals(confirm)) {
             problem = "The two passwords are not the same.";
         }
@@ -97,11 +101,27 @@ public class AuthService {
 
         boolean needsApproval = settingsDAO.getFlag(SettingsDAO.SIGNUPS_NEED_APPROVAL);
         String status = needsApproval ? User.PENDING : User.ACTIVE;
-        userDAO.addUser(fullName.trim(), user, password, User.USER, status);
+        userDAO.addUser(fullName.trim(), user, mail, password, User.USER, status);
         ActivityDAO.record(fullName.trim(), "signed up as @" + user);
         return needsApproval
                 ? "Account created. An admin has to approve it before you can log in."
                 : "Account created. You can log in now.";
+    }
+
+    /**
+     * The email rule: something like name@example.com, at most 120 characters.
+     * required = false lets an empty email through (admins may leave it out).
+     * Returns null if it is fine, otherwise the message to show.
+     */
+    public static String checkEmail(String email, boolean required) {
+        String mail = email == null ? "" : email.trim();
+        if (mail.isEmpty()) {
+            return required ? "Enter your email address, e.g. name@example.com." : null;
+        }
+        if (mail.length() > 120 || !mail.matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+")) {
+            return "Enter a valid email address, e.g. name@example.com.";
+        }
+        return null;
     }
 
     /** The rules for a new account. Returns null if everything is fine. */

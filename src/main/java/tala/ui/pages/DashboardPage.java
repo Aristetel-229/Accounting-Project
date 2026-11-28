@@ -807,7 +807,9 @@ public class DashboardPage extends BasePage {
         @Override
         protected void paintComponent(Graphics g) {
             float t = Hover.of(this).value();
-            setForeground(Theme.mix(Theme.PURPLE, Theme.PURPLE_DEEP, t));
+            boolean onPurple = Boolean.TRUE.equals(getClientProperty(tala.ui.components.Card.ON_DARK));
+            setForeground(onPurple ? Theme.mix(Theme.YELLOW, new Color(0xfff1a8), t)      // yellow link on a purple header
+                                   : Theme.mix(Theme.PURPLE, Theme.PURPLE_DEEP, t));
             super.paintComponent(g);
             Graphics2D g2 = smooth(g);
             FontMetrics fm = g2.getFontMetrics(getFont());

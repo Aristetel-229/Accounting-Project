@@ -240,6 +240,62 @@ public abstract class BasePage extends JPanel {
         return panel;
     }
 
+    // ------------------------------------------------------------ exports
+
+    /** The folder of the last export, so the next save window opens there */
+    private static java.io.File lastExportFolder = null;
+
+    /**
+     * Asks where to save an export. extension = "xlsx" or "csv".
+     * Returns null when cancelled (or when the user did not want to replace a file).
+     */
+    protected java.io.File chooseExportFile(String title, String baseName, String extension) {
+        boolean excel = extension.equals("xlsx");
+        javax.swing.JFileChooser chooser = new javax.swing.JFileChooser(lastExportFolder);
+        chooser.setDialogTitle(title);
+        chooser.setAcceptAllFileFilterUsed(false);
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+                excel ? "Excel workbook, colored (*.xlsx)" : "CSV, plain text (*.csv)", extension));
+        chooser.setSelectedFile(new java.io.File(baseName + "." + extension));
+        if (chooser.showSaveDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) {
+            return null;
+        }
+        java.io.File file = chooser.getSelectedFile();
+        if (!file.getName().toLowerCase(java.util.Locale.ROOT).endsWith("." + extension)) {
+            file = new java.io.File(file.getParentFile(), file.getName() + "." + extension);
+        }
+        lastExportFolder = file.getParentFile();
+        if (file.exists() && !confirm("Replace file", file.getName() + " already exists. Replace it?", "Replace", "Cancel")) {
+            return null;
+        }
+        return file;
+    }
+
+    /** "Saved to ..." with a button that opens the file right away */
+    protected void showSaved(java.io.File file) {
+        Object[] options = {"Open file", "OK"};
+        int choice = JOptionPane.showOptionDialog(this, "Saved to " + file.getAbsolutePath(), "Export finished",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
+        if (choice == 0) {
+            try {
+                java.awt.Desktop.getDesktop().open(file);
+            } catch (Exception e) {
+                showError("The file was saved, but it could not be opened here.", e);
+            }
+        }
+    }
+
+    /** A CSV value: quoted when it holds a comma, a quote or a line break */
+    protected static String csv(Object value) {
+        String v = value == null ? "" : value.toString();
+        return v.matches("(?s).*[\",\\r\\n].*") ? "\"" + v.replace("\"", "\"\"") + "\"" : v;
+    }
+
+    /** A plain number for CSV files (no peso sign, no thousands commas) */
+    protected static String csvAmount(java.math.BigDecimal amount) {
+        return amount == null || amount.signum() == 0 ? "" : amount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+    }
+
     // ------------------------------------------------------------ messages
 
     protected void showError(String message, Exception e) {

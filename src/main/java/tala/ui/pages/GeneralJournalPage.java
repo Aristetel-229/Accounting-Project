@@ -26,6 +26,7 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.math.BigDecimal;
@@ -74,7 +75,11 @@ public class GeneralJournalPage extends BasePage {
     private TalaTable totalTable;
     private final JPanel totalStrip = new JPanel(new BorderLayout());
 
+    // "Accounts in this journal": a chip per account (Cash · Dr, Accounts Payable · Cr)
+    private final ChipStrip accountChips = new ChipStrip();
+
     private List<JournalEntry> allEntries = new ArrayList<>();
+    private final List<JournalEntry> shownEntries = new ArrayList<>();   // what the table shows (for Export)
     private boolean loading = false;   // stops the month box from reloading while we fill it
 
     public GeneralJournalPage(MainFrame mainFrame, AccountDAO accountDAO, JournalDAO journalDAO) {
@@ -87,10 +92,17 @@ public class GeneralJournalPage extends BasePage {
                 return kind(row).equals(TOTAL_ROW) || (kind(row).equals(DEBIT_ROW));
             }
             @Override protected Color rowBackground(int row, boolean selected) {
-                return kind(row).equals(TOTAL_ROW) ? Theme.CREAM : Color.WHITE;
+                return kind(row).equals(TOTAL_ROW) ? Theme.HEAD_BG : Color.WHITE;
             }
             @Override protected Color cellForeground(int row, int column) {
                 return kind(row).equals(MEMO_ROW) ? Theme.MUTED : Theme.TEXT;
+            }
+            // the date of each entry sits in a small cream pill ("Nov 3")
+            @Override protected Color[] pillColors(String text) {
+                return new Color[] {Theme.AMBER_BG, Theme.AMBER};
+            }
+            @Override protected boolean cellBold(int row, int column) {
+                return column == 0 || rowBold(row);
             }
             @Override protected int cellIndent(int row, int column) {
                 if (column != 1) return 0;
@@ -100,6 +112,7 @@ public class GeneralJournalPage extends BasePage {
             }
         };
         table.setRightAligned(3, 4);
+        table.setPillColumns(0);
         table.setColumnWidths(120, 0, 110, 170, 170);
         table.setRowSelectionAllowed(false);
 
@@ -108,6 +121,8 @@ public class GeneralJournalPage extends BasePage {
         AppButton refresh = new AppButton("Refresh", Icons.get(Icons.REFRESH, 16, Theme.PURPLE_DEEP), AppButton.Style.SECONDARY);
         refresh.addActionListener(e -> refreshData());
         header.addAction(refresh);
+        header.addAction(new tala.ui.components.ExportMenu("General Journal",
+                () -> export("csv"), () -> export("xlsx"), this::printJournal));
         addSection(header);
 
         // four slim summary tiles
@@ -140,8 +155,8 @@ public class GeneralJournalPage extends BasePage {
         // pinned Total row: same columns as the table, cream like the design
         totalTable = new TalaTable(totalModel) {
             @Override protected boolean rowBold(int row) { return true; }
-            @Override protected Color rowBackground(int row, boolean selected) { return Theme.CREAM; }
-            @Override protected Color cellForeground(int row, int column) { return Theme.TITLE; }
+            @Override protected Color rowBackground(int row, boolean selected) { return Theme.HEAD_BG; }
+            @Override protected Color cellForeground(int row, int column) { return Theme.PURPLE_DEEP; }
         };
         totalTable.setColumnModel(table.getColumnModel());
         totalTable.setRightAligned(3, 4);
@@ -149,7 +164,7 @@ public class GeneralJournalPage extends BasePage {
         totalTable.setFocusable(false);
         totalStrip.setOpaque(false);
         totalStrip.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(1, 0, 0, 0, Theme.CREAM_LINE),
+                BorderFactory.createMatteBorder(2, 0, 0, 0, new Color(0xc4b0ee)),
                 BorderFactory.createEmptyBorder(0, 0, 0, 12)));   // 12 = the scroll bar beside the rows
         totalStrip.add(totalTable, BorderLayout.CENTER);
 
@@ -158,8 +173,10 @@ public class GeneralJournalPage extends BasePage {
         south.add(emptyLabel, BorderLayout.NORTH);
         south.add(totalStrip, BorderLayout.SOUTH);
 
+        accountChips.setOpaque(false);
         JPanel body = new JPanel(new BorderLayout());
         body.setOpaque(false);
+        body.add(accountChips, BorderLayout.NORTH);
         body.add(table.inScroll(), BorderLayout.CENTER);
         body.add(south, BorderLayout.SOUTH);
         card.setBody(body);
@@ -216,6 +233,8 @@ public class GeneralJournalPage extends BasePage {
 
         model.clear();
         rowKinds.clear();
+        shownEntries.clear();
+        java.util.Map<Integer, String[]> chips = new java.util.TreeMap<>();   // code -> {name, sides}
         BigDecimal totalDebit = BigDecimal.ZERO;
         BigDecimal totalCredit = BigDecimal.ZERO;
         int count = 0;
@@ -230,12 +249,19 @@ public class GeneralJournalPage extends BasePage {
                 continue;
             }
             count++;
+            shownEntries.add(e);
 
             boolean firstLine = true;
             for (JournalLine line : e.getLines()) {
                 String date = firstLine ? DateUtil.toShort(e.getDate()) : "";
                 String code = String.valueOf(line.getAccount().getCode());
                 accountsUsed.add(line.getAccount().getCode());
+                String[] chip = chips.computeIfAbsent(line.getAccount().getCode(),
+                        k -> new String[] {line.getAccount().getName(), ""});
+                String side = line.isDebit() ? "Dr" : "Cr";
+                if (!chip[1].contains(side)) {
+                    chip[1] = chip[1].isEmpty() ? side : "Dr/Cr";
+                }
                 if (line.isDebit()) {
                     model.addRow(new Object[] {date, line.getAccount().getName(), code, Money.peso(line.getDebit()), ""});
                     rowKinds.add(DEBIT_ROW);
@@ -254,6 +280,7 @@ public class GeneralJournalPage extends BasePage {
             totalCredit = totalCredit.add(e.getTotalCredit());
         }
 
+        fillChips(chips);
         totalModel.clear();
         totalModel.addRow(new Object[] {"Total", "", "", Money.peso(totalDebit), Money.peso(totalCredit)});
         totalStrip.setVisible(count > 0);
@@ -276,11 +303,200 @@ public class GeneralJournalPage extends BasePage {
         repaint();
     }
 
+    /** The "ACCOUNTS IN THIS JOURNAL" line: violet chips for debits, cream chips for credits */
+    private void fillChips(java.util.Map<Integer, String[]> chips) {
+        accountChips.removeAll();
+        accountChips.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(0xe6ddf6)),
+                BorderFactory.createEmptyBorder(9, 12, 9, 12)));
+        JLabel title = new JLabel("ACCOUNTS IN THIS JOURNAL");
+        title.setFont(Theme.spaced(Theme.semibold(11.5f), 0.08f));
+        title.setForeground(Theme.PURPLE_DARK);
+        title.setBorder(BorderFactory.createEmptyBorder(3, 0, 3, 4));
+        accountChips.add(title);
+        StringBuilder all = new StringBuilder("<html><b>Accounts in this journal</b>");
+        for (String[] chip : chips.values()) {
+            boolean credit = chip[1].equals("Cr");
+            Badge b = new Badge(chip[0] + " · " + chip[1], credit ? Theme.AMBER_BG : new Color(0xf0ecfb),
+                    credit ? Theme.AMBER : new Color(0x5b3fb8));
+            b.setFont(Theme.semibold(12.5f));
+            accountChips.add(b);
+            all.append("<br>").append(chip[0].replace("<", "&lt;")).append(" · ").append(chip[1]);
+        }
+        Badge more = new Badge("", Theme.PURPLE_TINT, Theme.PURPLE_DARK);
+        more.setFont(Theme.semibold(12.5f));
+        more.setToolTipText(all.append("</html>").toString());
+        accountChips.add(more);          // "+12 more" when the chips do not fit on two lines
+        accountChips.setVisible(!chips.isEmpty());
+        accountChips.revalidate();
+        accountChips.repaint();
+    }
+
+    // =================================================================
+    //  Export (CSV, colored Excel, PDF / print) of the entries shown
+    // =================================================================
+
+    private String filterLabel() {
+        Object month = monthCombo.getSelectedItem();
+        String label = month == null ? "All months" : month.toString();
+        String search = searchField.getText().trim();
+        return search.isEmpty() ? label : label + " · search \"" + search + "\"";
+    }
+
+    private void export(String extension) {
+        if (shownEntries.isEmpty()) {
+            showInfo("There are no journal entries to export yet.");
+            return;
+        }
+        String base = "TALA-General-Journal-" + filterLabel().replaceAll("[^A-Za-z0-9]+", "-").replaceAll("-+$", "");
+        java.io.File file = chooseExportFile("Export the General Journal", base, extension);
+        if (file == null) {
+            return;
+        }
+        try {
+            if (extension.equals("xlsx")) {
+                tala.service.ReportExcel.writeJournal(shownEntries, filterLabel(), file);
+            } else {
+                writeCsv(file);
+            }
+            showSaved(file);
+        } catch (java.io.IOException ex) {
+            showError("Could not save the file. If it is open in Excel, close it and try again.", ex);
+        }
+    }
+
+    /** Plain CSV: one line per debit / credit, with the description and reference */
+    private void writeCsv(java.io.File file) throws java.io.IOException {
+        try (java.io.PrintWriter out = new java.io.PrintWriter(file, "UTF-8")) {
+            out.print('﻿');   // lets Excel read the peso sign and accents correctly
+            out.println("Date,Account,Post ref,Debit,Credit,Description,Reference,Type");
+            BigDecimal dr = BigDecimal.ZERO, cr = BigDecimal.ZERO;
+            for (JournalEntry e : shownEntries) {
+                for (JournalLine line : e.getLines()) {
+                    out.println(csv(DateUtil.toInput(e.getDate())) + "," + csv(line.getAccount().getName()) + ","
+                            + line.getAccount().getCode() + "," + csvAmount(line.getDebit()) + ","
+                            + csvAmount(line.getCredit()) + "," + csv(e.getDescription()) + ","
+                            + csv(e.getReferenceNo()) + "," + csv(e.getEntryType()));
+                }
+                dr = dr.add(e.getTotalDebit());
+                cr = cr.add(e.getTotalCredit());
+            }
+            out.println("Total,,," + csvAmount(dr) + "," + csvAmount(cr) + ",,,");
+        }
+    }
+
+    private void printJournal() {
+        if (shownEntries.isEmpty()) {
+            showInfo("There are no journal entries to print yet.");
+            return;
+        }
+        try {
+            tala.service.ReportPrint.journal(shownEntries, filterLabel());
+        } catch (java.io.IOException ex) {
+            showError("Could not open the print page.", ex);
+        }
+    }
+
     private static JLabel footLabel() {
         JLabel label = new JLabel();
         label.setFont(Theme.regular(14.5f));
         label.setForeground(Theme.TEXT_SOFT);
         label.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 24));
         return label;
+    }
+
+    /**
+     * The chips line: chips flow onto at most two lines; whatever does not fit
+     * is summed up in a last "+N more" chip (its tooltip lists every account).
+     * The last child is that "+N more" chip.
+     */
+    private static class ChipStrip extends JPanel {
+        private static final int GAP = 8, ROW_GAP = 6, MAX_ROWS = 2;
+
+        ChipStrip() {
+            super(null);
+            setOpaque(false);
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            int rows = place(false);
+            java.awt.Insets in = getInsets();
+            int h = rows == 0 ? 0 : rows * 26 + (rows - 1) * ROW_GAP;
+            return new Dimension(100, in.top + in.bottom + h);
+        }
+
+        @Override
+        public void doLayout() {
+            place(true);
+        }
+
+        /** Places the chips (or only counts the lines); returns the number of lines used */
+        private int place(boolean apply) {
+            int n = getComponentCount();
+            if (n == 0) {
+                return 0;
+            }
+            java.awt.Insets in = getInsets();
+            int width = getWidth() > 0 ? getWidth() : (getParent() != null ? getParent().getWidth() : 900);
+            int max = Math.max(200, width - in.left - in.right);
+            Badge more = (Badge) getComponent(n - 1);
+            // how many of the chips (title + chips, not "more") fit
+            int x = 0, row = 0, fit = 0;
+            for (int i = 0; i < n - 1; i++) {
+                Dimension d = getComponent(i).getPreferredSize();
+                if (x > 0 && x + d.width > max) {
+                    row++;
+                    x = 0;
+                }
+                if (row >= MAX_ROWS) {
+                    break;
+                }
+                x += d.width + GAP;
+                fit++;
+            }
+            int hidden = (n - 1) - fit;
+            if (hidden > 0) {
+                // make room for "+N more" at the end of the last line
+                while (true) {
+                    more.setText("+" + hidden + " more");
+                    int mx = 0, r = 0;
+                    for (int i = 0; i < fit; i++) {
+                        Dimension d = getComponent(i).getPreferredSize();
+                        if (mx > 0 && mx + d.width > max) { r++; mx = 0; }
+                        mx += d.width + GAP;
+                    }
+                    if (mx + more.getPreferredSize().width <= max || fit <= 1) {
+                        break;
+                    }
+                    fit--;
+                    hidden++;
+                }
+            }
+            x = 0;
+            row = 0;
+            int y = in.top;
+            for (int i = 0; i < n; i++) {
+                Component c = getComponent(i);
+                boolean show = i < fit || (i == n - 1 && hidden > 0);
+                if (apply) {
+                    c.setVisible(show);
+                }
+                if (!show) {
+                    continue;
+                }
+                Dimension d = c.getPreferredSize();
+                if (x > 0 && x + d.width > max) {
+                    row++;
+                    x = 0;
+                    y += 26 + ROW_GAP;
+                }
+                if (apply) {
+                    c.setBounds(in.left + x, y + (26 - d.height) / 2, d.width, d.height);
+                }
+                x += d.width + GAP;
+            }
+            return row + 1;
+        }
     }
 }

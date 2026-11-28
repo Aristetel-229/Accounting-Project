@@ -244,6 +244,7 @@ public class JournalEntryPage extends BasePage {
 
     private Card createPreviewCard() {
         Card card = new Card("Entry preview", "How this entry will post");
+        card.setLightHeader();   // the design keeps the preview card white
 
         JPanel tAccounts = new JPanel(new GridLayout(1, 2, 12, 0));
         tAccounts.setOpaque(false);

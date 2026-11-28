@@ -15,15 +15,58 @@ import java.awt.geom.Point2D;
  *   linear-gradient(135deg, #ede6ff 0%, #f6f2ff 35%, #fbf9ff 60%, #fff8e3 100%)
  *   + a soft yellow glow in the top-right corner
  *   + a soft violet glow in the bottom-left corner
+ *
+ * The gradients are slow to draw, and the page background is behind
+ * everything (it is redrawn while scrolling and on every hover), so it
+ * is drawn ONCE into a picture at the screen's own resolution and that
+ * picture is reused until the window size changes.
  */
 public final class Backdrop {
 
     private Backdrop() { }
 
+    /** A few ready pictures, by size (pages, the log-in window...) */
+    private static final java.util.Map<String, java.awt.image.BufferedImage> CACHE =
+            new java.util.LinkedHashMap<String, java.awt.image.BufferedImage>(8, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(java.util.Map.Entry<String, java.awt.image.BufferedImage> eldest) {
+                    return size() > 4;
+                }
+            };
+
     public static void paint(Graphics2D g, int w, int h) {
         if (w <= 0 || h <= 0) {
             return;
         }
+        AffineTransform t = g.getTransform();
+        double scale = t.getScaleX();
+        boolean simple = t.getShearX() == 0 && t.getShearY() == 0 && scale == t.getScaleY() && scale > 0 && scale <= 4;
+        if (!simple) {
+            draw(g, w, h);   // printing or an unusual transform: draw it directly
+            return;
+        }
+        int pw = (int) Math.ceil(w * scale), ph = (int) Math.ceil(h * scale);
+        String key = pw + "x" + ph + "@" + scale;
+        java.awt.image.BufferedImage img = CACHE.get(key);
+        if (img == null) {
+            java.awt.GraphicsConfiguration gc = g.getDeviceConfiguration();
+            img = gc != null && gc.getDevice().getType() == java.awt.GraphicsDevice.TYPE_RASTER_SCREEN
+                    ? gc.createCompatibleImage(pw, ph, java.awt.Transparency.OPAQUE)
+                    : new java.awt.image.BufferedImage(pw, ph, java.awt.image.BufferedImage.TYPE_INT_RGB);
+            Graphics2D ig = img.createGraphics();
+            ig.scale(scale, scale);
+            draw(ig, w, h);
+            ig.dispose();
+            CACHE.put(key, img);
+        }
+        Graphics2D g2 = (Graphics2D) g.create();
+        // draw 1:1 in screen pixels (no resampling)
+        g2.setTransform(AffineTransform.getTranslateInstance(t.getTranslateX(), t.getTranslateY()));
+        g2.drawImage(img, 0, 0, null);
+        g2.dispose();
+    }
+
+    private static void draw(Graphics2D g, int w, int h) {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
         g2.setPaint(new LinearGradientPaint(0, 0, Math.max(1, w), Math.max(1, h),

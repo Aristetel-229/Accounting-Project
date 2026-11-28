@@ -18,18 +18,33 @@ import java.awt.RenderingHints;
 public class IconBox extends JComponent {
 
     private final int boxSize;
-    private final Color background;
-    private final Icon icon;
+    private Color background;
+    private Icon icon;
+    private final String iconName;
     private Color outline = null;
 
     public IconBox(String iconName, int boxSize, Color background, Color iconColor) {
         this.boxSize = boxSize;
         this.background = background;
-        this.icon = Icons.get(iconName, boxSize <= 30 ? 14 : boxSize <= 40 ? 17 : 26, iconColor);
+        this.iconName = iconName;
+        this.icon = Icons.get(iconName, iconSize(), iconColor);
         Dimension size = new Dimension(boxSize, boxSize);
         setPreferredSize(size);
         setMinimumSize(size);
         setMaximumSize(size);
+    }
+
+    private int iconSize() {
+        return boxSize <= 30 ? 14 : boxSize <= 40 ? 17 : 26;
+    }
+
+    /** On a purple card header: a see-through white square with a yellow icon */
+    public IconBox setOnDark() {
+        background = new Color(255, 255, 255, 36);
+        icon = Icons.get(iconName, iconSize(), tala.ui.theme.Theme.YELLOW);
+        outline = new Color(255, 255, 255, 40);
+        repaint();
+        return this;
     }
 
     /** A hairline around the square, e.g. "inset 0 0 0 1px rgba(46,16,101,.08)" (null = none) */

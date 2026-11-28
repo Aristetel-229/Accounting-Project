@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS users (
     user_id        INT AUTO_INCREMENT PRIMARY KEY,
     full_name      VARCHAR(100) NOT NULL,
     username       VARCHAR(40)  NOT NULL UNIQUE,
+    email          VARCHAR(120) NULL,
     password_hash  VARCHAR(100) NOT NULL,
     role           ENUM('User','Admin') NOT NULL DEFAULT 'User',
     status         ENUM('Active','Pending','Inactive') NOT NULL DEFAULT 'Active',
